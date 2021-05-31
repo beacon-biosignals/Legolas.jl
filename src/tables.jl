@@ -5,6 +5,7 @@ const LEGOLAS_SCHEMA_METADATA_KEY = "legolas_qualified_schema"
 #####
 
 function validate(table, legolas_schema::Schema)
+    Tables.rowcount(table) > 0 || return nothing
     tables_schema = Tables.schema(table)
     if tables_schema isa Tables.Schema
         try
@@ -37,15 +38,17 @@ function read(path; validate::Bool=true)
 end
 
 function write(io_or_path, schema::Schema, table; validate::Bool=true, kwargs...)
-    validate && Legolas.validate(table, schema)
     # This `Tables.columns` call is unfortunately necessary to ensure we can attach
     # metadata in a manner that will correctly persist; otherwise, Arrow.jl might
     # accidentally "drop" any metadata attached to `table` when it internally calls
-    # `Tables.columns` on the input to `Arrow.write`. We should probably fix this
-    # upstream at some point...
+    # `Tables.columns` on the input to `Arrow.write`. It is also the case that
+    # `Tables.schema(Tables.columns(table))` is more likely to return a `Tables.Schema`
+    # (rather than `nothing`) than a bare `table`, especially if `table::Vector`.
+    # We should probably fix/improve these upstream at some point.
     columns = Tables.columns(table)
+    validate && Legolas.validate(columns, schema)
     assign_to_table_metadata!(columns, (LEGOLAS_SCHEMA_METADATA_KEY => qualified_schema_string(schema),))
-    write_arrow_table(io_or_path, columns; kwargs...)
+    write_arrow(io_or_path, columns; kwargs...)
     return table
 end
 
