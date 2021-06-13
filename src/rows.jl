@@ -32,9 +32,9 @@ end
 @inline schema_parent(::Type{<:Schema}) = nothing
 @inline schema_parent(schema::Schema) = schema_parent(typeof(schema))
 
-function qualified_schema_string end
+function schema_qualified_string end
 
-# Note that there exist very clean implementations of these functions:
+# Note that there exist very clean generic implementations of `transform`/`validate`:
 #
 #    function transform(schema::Schema; fields...)
 #        parent = schema_parent(schema)
@@ -133,16 +133,16 @@ macro row(schema_expr, fields...)
     field_names = [esc(f.args[1].args[1]) for f in fields]
     schema_type = Base.Meta.quot(typeof(schema))
     quoted_parent = Base.Meta.quot(parent)
-    qualified_schema_string = string(schema_name(schema), '@', schema_version(schema))
+    schema_qualified_string = string(schema_name(schema), '@', schema_version(schema))
     parent_transform = nothing
     parent_validate = nothing
     if !isnothing(parent)
-        qualified_schema_string = :(string($qualified_schema_string, '>', Legolas.qualified_schema_string($quoted_parent)))
+        schema_qualified_string = :(string($schema_qualified_string, '>', Legolas.schema_qualified_string($quoted_parent)))
         parent_transform = :(fields = transform($quoted_parent; fields...))
         parent_validate = :(validate(tables_schema, $quoted_parent))
     end
     return quote
-        Legolas.qualified_schema_string(::$schema_type) = $qualified_schema_string
+        Legolas.schema_qualified_string(::$schema_type) = $schema_qualified_string
 
         Legolas.schema_parent(::Type{<:$schema_type}) = $quoted_parent
 

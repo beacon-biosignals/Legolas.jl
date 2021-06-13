@@ -1,29 +1,30 @@
-const LEGOLAS_SCHEMA_METADATA_KEY = "legolas_qualified_schema"
+const LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY = "legolas_schema_qualified"
 
 #####
 ##### validate tables
 #####
 
 function validate(table, legolas_schema::Schema)
-    Tables.rowcount(table) > 0 || return nothing
-    tables_schema = Tables.schema(table)
+    columns = Tables.columns(table)
+    Tables.rowcount(columns) > 0 || return nothing
+    tables_schema = Tables.schema(columns)
     if tables_schema isa Tables.Schema
         try
             validate(tables_schema, legolas_schema)
         catch
-            @warn "`Tables.Schema` from provided `table` does not appear to match provided `Legolas.Schema`. Call `Legolas.Row.(legolas_schema, Tables.rows(table))` to try converting `table` to a compatible representation."
+            @warn "provided table's `Tables.Schema` does not appear to match provided `Legolas.Schema`. Run `[Legolas.Row($legolas_schema, r) for r in Tables.rows(t)]` to try converting the table `t` to a compatible representation."
             rethrow()
         end
     else
-        @warn "could not determine `Tables.Schema` from provided `table`; skipping schema validation"
+        @warn "could not determine `Tables.Schema` from provided table; skipping schema validation"
     end
     return nothing
 end
 
 function validate(table)
     metadata = Arrow.getmetadata(table)
-    (metadata isa Dict && haskey(metadata, LEGOLAS_SCHEMA_METADATA_KEY)) || throw(ArgumentError("`$LEGOLAS_SCHEMA_METADATA_KEY` field not found in Arrow table metadata"))
-    validate(table, Schema(metadata[LEGOLAS_SCHEMA_METADATA_KEY]))
+    (metadata isa Dict && haskey(metadata, LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY)) || throw(ArgumentError("`$LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY` field not found in Arrow table metadata"))
+    validate(table, Schema(metadata[LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY]))
     return nothing
 end
 
@@ -37,19 +38,23 @@ function read(path; validate::Bool=true)
     return table
 end
 
-function write(io_or_path, schema::Schema, table; validate::Bool=true, kwargs...)
-    # This `Tables.columns` call is unfortunately necessary to ensure we can attach
-    # metadata in a manner that will correctly persist; otherwise, Arrow.jl might
-    # accidentally "drop" any metadata attached to `table` when it internally calls
-    # `Tables.columns` on the input to `Arrow.write`. It is also the case that
-    # `Tables.schema(Tables.columns(table))` is more likely to return a `Tables.Schema`
-    # (rather than `nothing`) than a bare `table`, especially if `table::Vector`.
-    # We should probably fix/improve these upstream at some point.
+function write(io_or_path, table, schema::Schema; validate::Bool=true, kwargs...)
+    # This `Tables.columns` call is unfortunately necessary; ref https://github.com/JuliaData/Arrow.jl/issues/211
+    # It is also the case that `Tables.schema(Tables.columns(table))` is more likely to return a `Tables.Schema`
+    # (rather than `nothing`) than a bare `table`, especially if `table::Vector`.  We should probably fix/improve
+    # these upstream at some point.
     columns = Tables.columns(table)
     validate && Legolas.validate(columns, schema)
-    assign_to_table_metadata!(columns, (LEGOLAS_SCHEMA_METADATA_KEY => qualified_schema_string(schema),))
+    assign_to_table_metadata!(columns, (LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY => schema_qualified_string(schema),))
     write_arrow(io_or_path, columns; kwargs...)
     return table
+end
+
+function tobuffer(args...; kwargs...)
+    io = IOBuffer()
+    Legolas.write(io, args...; kwargs...)
+    seekstart(io)
+    return io
 end
 
 #####
@@ -161,4 +166,3 @@ julia> @time foreach(identity, (nested_structure for nested_structure in materia
 ```
 """
 materialize(table) = map(collect, Tables.columntable(table))
-

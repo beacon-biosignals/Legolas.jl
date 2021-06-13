@@ -5,10 +5,10 @@
 
 using Legolas, Arrow, Tables, Test
 
-using Legolas: @row
+using Legolas: @row, Schema
 
 #####
-##### Introduction to the `@row` Macro
+##### Introduction to the `@row` Macro and `Legolas.Row` constructors
 #####
 # The most interesting bit of Legolas.jl functionality is the package's `@row` macro, which callers can use
 # define new [`Tables.AbstractRow`-compliant](https://tables.juliadata.org/stable/#Tables.AbstractRow-1)
@@ -19,7 +19,7 @@ using Legolas: @row
 
 # Declare a `Legolas.Schema` with name `"my-schema"` at version `1` whose *required fields*
 # `a`, `b`, `c`, `d`, and `e` are specified via the provided assignment expressions, then return
-# a row type that matches the declared schema:
+# a corresponding row type that matches the declared schema:
 const MyRow = @row("my-schema@1",
                    a::Real = sin(a),
                    b::String = string(a, b, c),
@@ -28,7 +28,7 @@ const MyRow = @row("my-schema@1",
                    e)
 
 # `MyRow` is thus an alias for the type returned by the `@row` macro:
-@test MyRow == Legolas.Row{typeof(Legolas.Schema("my-schema", 1))}
+@test MyRow == Legolas.Row{typeof(Schema("my-schema@1"))}
 
 # The `MyRow` type has several useful constructors. Let's start with the constructor that
 # accepts all required fields as keyword arguments:
@@ -73,12 +73,24 @@ row = MyRow(a=1.5, b="hello", c="goodbye", my_other_field=":)", d=2, e=["anythin
 # and extracts all input fields from that value. Here, we demonstrate with a `NamedTuple`:
 @test row == MyRow((a=1.5, b="hello", c="goodbye", d=2, e=["anything"], my_other_field=":)"))
 
+# To summarize:
+#
+# - Inputs to `Legolas.Row` constructors...
+#     - ...may be any `Tables.AbstractRow`-compliant value
+#     - ...may contain required fields in any order
+#     - ...may elide required fields, in which case the constructor will assume them to be `missing`
+#     - ...may contain any other fields in addition to the required fields
+# - Outputs of `Legolas.Row` constructors...
+#     - ...will contain all required fields ("missing" fields are explicitly presented with `missing` values)
+#     - ...will order all required fields as specificed by the input `Schema`
+#     - ...will contain all given non-required fields after required fields, in the order provided by the caller
+
 #####
 ##### Extending Existing Rows/Schemas
 #####
 # Row types declared via `@row` can inherit the fields and transformations specified by other `@row`-declared types.
-# Niftily, the properties we demonstrated above enable this extension mechanism to be implemented via composition
-# under the hood.
+# Niftily, the properties of `Legolas.Row` that we demonstrated above enable this extension mechanism to be
+# implemented via composition under the hood.
 
 # Declare a row type whose schema is named `"my-child-schema"` at version `1` that inherits the fields of the
 # `my-schema@1` schema that we defined in the previous section.
@@ -106,9 +118,63 @@ child = MyChildRow(input)
 # (though technically not always) have a greater total number of required fields than the parent row.
 
 #####
-##### Reading/Writing/Validating `Arrow.Table`s with Legolas.jl
+##### Validating/Writing/Reading `Arrow.Table`s with Legolas.jl
 #####
-# TODO
+
+# Legolas provides special methods for reading/writing/validating Arrow tables that utilize `Legolas.Schema`s. To
+# start exploring these methods, we'll first construct a dummy table using `row::MyRow` from the previous section:
+rows = [row,
+        Tables.rowmerge(row; b="a different one"),
+        Tables.rowmerge(row; e=:anything)]
+
+# We can validate that `rows` is compliant w.r.t. `schema` via `Legolas.validate`, which will throw a descriptive
+# error if the `Tables.schema(rows)` mismatches with the required columns/types specified by the `schema`.
+schema = Schema("my-schema", 1)
+@test schema === Schema("my-schema@1") # `Schema("my-schema", 1)` is an alternative to `Schema("my-schema@1")`
+@test (Legolas.validate(rows, schema); true)
+invalid = vcat(rows, Tables.rowmerge(row; a="this violates the schema's `a::Real` requirement"))
+@test_throws ArgumentError("field `a` has unexpected type; expected <:Real, found Any") Legolas.validate(invalid, schema)
+
+# Legolas also provides `Legolas.write(path_or_io, table, schema; kwargs...)`, which wraps `Arrow.write(path_or_io, table; kwargs...)`
+# and performs two additional operations atop the usual operations performed by that function:
+#
+# - By default, the provided Tables.jl-compliant `table` is validated against `schema` via `Legolas.validate` before
+#   it is actually written out. Note that this can be disabled by passing `validate=false` to `Legolas.write`.
+#
+# - `Legolas.write` ensures that the written-out Arrow table's metadata contains a `"legolas_schema_qualified"`
+#   key whose value is `Legolas.schema_qualified_string(schema)`. This field enables consumers of the table to
+#   perform automated (or manual) schema discovery/evolution/validation.
+
+schema = Schema("my-child-schema", 1) # For this example, let's use a schema that has a parent
+rows = [child,
+        Tables.rowmerge(child; b="a different one"),
+        Tables.rowmerge(child; e=:anything)]
+io = IOBuffer()
+Legolas.write(io, rows, schema)
+t = Arrow.Table(seekstart(io))
+
+table_isequal(a, b) = isequal(Legolas.materialize(a), Legolas.materialize(b))
+
+@test Arrow.getmetadata(t) == Dict("legolas_schema_qualified" => "my-child-schema@1>my-schema@1")
+@test table_isequal(t, Arrow.Table(Arrow.tobuffer(rows)))
+@test table_isequal(t, Arrow.Table(Legolas.tobuffer(rows, schema))) # `Legolas.tobuffer` is analogous to `Arrow.tobuffer`
+
+invalid = vcat(rows, Tables.rowmerge(child; a="this violates the schema's `a::Real` requirement"))
+@test_throws ArgumentError("field `a` has unexpected type; expected <:Real, found Any") Legolas.tobuffer(invalid, schema)
+
+# Similarly, Legolas provides `Legolas.read(path_or_io)`, which wraps `Arrow.Table(path_or_io)`
+# and performs `Legolas.validate` on the resulting `Arrow.Table` before returning it.
+@test table_isequal(Legolas.read(Legolas.tobuffer(rows, schema)), t)
+@test_throws ArgumentError("`legolas_schema_qualified` field not found in Arrow table metadata") Legolas.read(Arrow.tobuffer(rows))
+invalid = Tables.columns(invalid) # ref https://github.com/JuliaData/Arrow.jl/issues/211
+Arrow.setmetadata!(invalid, Dict("legolas_schema_qualified" => "my-child-schema@1>my-schema@1"))
+@test_throws ArgumentError("field `a` has unexpected type; expected <:Real, found Union{Missing, Float64, String}") Legolas.read(Arrow.tobuffer(invalid))
+
+# A note about one additional benefit of `Legolas.read`/`Legolas.write`: Unlike their Arrow.jl counterparts,
+# these functions are relatively agnostic to the types of provided path arguments. Generally, as long as a
+# given `path` supports `Base.read(path)::Vector{UInt8}`, `Base.write(path, bytes::Vector{UInt8})`, and
+# `mkpath(dirname(path))`, then `path` will work as an argument to `Legolas.read`/`Legolas.write`. At some
+# point, we'd like to make similar upstream improvements to Arrow.jl to render its API more path-type-agnostic.
 
 #####
 ##### Simple Integer Versioning: You Break It, You Bump It
