@@ -175,22 +175,3 @@ Arrow.setmetadata!(invalid, Dict("legolas_schema_qualified" => "my-child-schema@
 # given `path` supports `Base.read(path)::Vector{UInt8}`, `Base.write(path, bytes::Vector{UInt8})`, and
 # `mkpath(dirname(path))`, then `path` will work as an argument to `Legolas.read`/`Legolas.write`. At some
 # point, we'd like to make similar upstream improvements to Arrow.jl to render its API more path-type-agnostic.
-
-#####
-##### Simple Integer Versioning: You Break It, You Bump It
-#####
-# TODO
-
-#####
-##### Tips For Schema Design
-#####
-# TODO: Cover the following:
-#
-#   - forward/backward compatibility via allowing `missing` columns when possible
-#   - avoid bumping schema versions by handling the deprecation path in the constructor
-#   - prefer idempotency in field expressions when possible
-#   - prefer Liskov substitutability when possible
-
-#####
-##### Miscellaneous Utilities
-#####

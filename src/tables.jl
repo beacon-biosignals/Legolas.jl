@@ -4,6 +4,9 @@ const LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY = "legolas_schema_qualified"
 ##### validate tables
 #####
 
+"""
+    TODO
+"""
 function validate(table, legolas_schema::Schema)
     columns = Tables.columns(table)
     Tables.rowcount(columns) > 0 || return nothing
@@ -21,6 +24,9 @@ function validate(table, legolas_schema::Schema)
     return nothing
 end
 
+"""
+    TODO
+"""
 function validate(table)
     metadata = Arrow.getmetadata(table)
     (metadata isa Dict && haskey(metadata, LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY)) || throw(ArgumentError("`$LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY` field not found in Arrow table metadata"))
@@ -32,12 +38,18 @@ end
 ##### read/write tables
 #####
 
+"""
+    TODO
+"""
 function read(path; validate::Bool=true)
     table = read_arrow(path)
     validate && Legolas.validate(table)
     return table
 end
 
+"""
+    TODO
+"""
 function write(io_or_path, table, schema::Schema; validate::Bool=true, kwargs...)
     # This `Tables.columns` call is unfortunately necessary; ref https://github.com/JuliaData/Arrow.jl/issues/211
     # It is also the case that `Tables.schema(Tables.columns(table))` is more likely to return a `Tables.Schema`
@@ -50,6 +62,9 @@ function write(io_or_path, table, schema::Schema; validate::Bool=true, kwargs...
     return table
 end
 
+"""
+    TODO
+"""
 function tobuffer(args...; kwargs...)
     io = IOBuffer()
     Legolas.write(io, args...; kwargs...)
@@ -81,6 +96,11 @@ write_arrow(path, table; kwargs...) = (io = IOBuffer(); write_arrow(io, table; k
 #####
 # TODO: upstream to Arrow.jl?
 
+"""
+    TODO
+
+Note that we intend to eventually migrate this function from Legolas.jl to a more appropriate package.
+"""
 function assign_to_table_metadata!(table, pairs)
     m = Arrow.getmetadata(table)
     if !(m isa Dict)
@@ -134,6 +154,8 @@ subtable. The default definition is sufficient for `DataFrames` tables.
 
 Note that this function may internally call `Tables.columns` on each input table, so
 it may be slower and/or require more memory if `any(!Tables.columnaccess, tables)`.
+
+Note that we intend to eventually migrate this function from Legolas.jl to a more appropriate package.
 """
 function gather(column_name, tables::Vararg{Any,N};
                 extract=((cols, idxs) -> view(cols, idxs, :))) where {N}
@@ -164,5 +186,7 @@ julia> materialized = Onda.materialize(items);
 julia> @time foreach(identity, (nested_structure for nested_structure in materialized.nested_structures));
   0.000014 seconds (2 allocations: 80 bytes)
 ```
+
+Note that we intend to eventually migrate this function from Legolas.jl to a more appropriate package.
 """
 materialize(table) = map(collect, Tables.columntable(table))
