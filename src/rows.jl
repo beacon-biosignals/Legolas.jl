@@ -184,7 +184,7 @@ macro row(schema_expr, fields...)
 
         function Legolas._transform(::$schema_type; $([Expr(:kw, f, :missing) for f in field_names]...), other...)
             $(map(esc, fields)...)
-            return (; $(field_names...), other...)
+            return (; $([Expr(:kw, f, f) for f in field_names]...), other...)
         end
 
         function Legolas._validate(tables_schema::Tables.Schema, legolas_schema::$schema_type)
