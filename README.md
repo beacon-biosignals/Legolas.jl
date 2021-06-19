@@ -9,4 +9,4 @@
 
 Legolas.jl is a Julia package that provides opinionated utilities for constructing, reading, writing, and validating Arrow tables against extensible, versioned, user-specified schemas.
 
-[Take The Tour](https://github.com/beacon-biosignals/Legolas.jl/tree/master/examples/tour.jl)
+Want to know more? [Take the tour!](https://github.com/beacon-biosignals/Legolas.jl/tree/master/examples/tour.jl)
