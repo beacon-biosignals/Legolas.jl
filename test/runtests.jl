@@ -66,7 +66,7 @@ end
     @test Legolas._iterator_for_column(a, :x) == dfa.x
 end
 
-@testset "Legolas.assign_to_table_metadata!" begin
+@testset "miscellaneous Legolas/src/tables.jl tests" begin
     struct Foo
         meta
     end
@@ -74,6 +74,21 @@ end
     foo = Foo(Dict("a" => "b", "b" => "b"))
     @test foo.meta === Legolas.assign_to_table_metadata!(foo, ("b" => "c", "d" => "e"))
     @test foo.meta == Dict("a" => "b", "b" => "c", "d" => "e")
+
+    struct MyPath
+        x::String
+    end
+    Base.read(p::MyPath) = Base.read(p.x)
+    Base.write(p::MyPath, bytes) = Base.write(p.x, bytes)
+    root = mktempdir()
+    path = MyPath(joinpath(root, "baz.arrow"))
+    Baz = @row("baz@1", a, b)
+    t = [Baz(a=1, b=2), Baz(a=3, b=4)]
+    Legolas.write(path, t, Schema("baz", 1))
+    @test t == Baz.(Tables.rows(Legolas.read(path)))
+
+    t = [(a="a", c=1, b="b"), Baz(a=1, b=2)] # not a valid Tables.jl table
+    @test_throws ErrorException Legolas.validate(t, Schema("baz", 1))
 end
 
 @testset "miscellaneous Legolas.Schema / Legolas.Row tests" begin
@@ -92,18 +107,4 @@ end
     @test r === Row(Schema("bar", 1), first(Tables.rows(Arrow.Table(Arrow.tobuffer((x=[1],y=[2],z=[3]))))))
     @test r[1] === 3
     @test string(r) == "Row(Schema(\"bar@1\"), (z = 3, x = 1, y = 2))"
-end
-
-@testset "generic path types" begin
-    struct MyPath
-        x::String
-    end
-    Base.read(p::MyPath) = Base.read(p.x)
-    Base.write(p::MyPath, bytes) = Base.write(p.x, bytes)
-    root = mktempdir()
-    path = MyPath(joinpath(root, "baz.arrow"))
-    Baz = @row("baz@1", a, b)
-    t = [Baz(a=1, b=2), Baz(a=3, b=4)]
-    Legolas.write(path, t, Schema("baz", 1))
-    @test t == Baz.(Tables.rows(Legolas.read(path)))
 end

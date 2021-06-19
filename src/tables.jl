@@ -1,3 +1,12 @@
+function _columns(table)
+    try
+        return Tables.columns(table)
+    catch
+        @warn "encountered error during internal invocation of `Tables.columns`; provided table might not be Tables.jl-compliant"
+        rethrow()
+    end
+end
+
 #####
 ##### validate tables
 #####
@@ -6,7 +15,7 @@
     TODO
 """
 function validate(table, legolas_schema::Schema)
-    columns = Tables.columns(table)
+    columns = _columns(table)
     Tables.rowcount(columns) > 0 || return nothing
     tables_schema = Tables.schema(columns)
     if tables_schema isa Tables.Schema
@@ -49,11 +58,11 @@ end
     TODO
 """
 function write(io_or_path, table, schema::Schema; validate::Bool=true, kwargs...)
-    # This `Tables.columns` call is unfortunately necessary; ref https://github.com/JuliaData/Arrow.jl/issues/211
+    # This `_columns` call is unfortunately necessary; ref https://github.com/JuliaData/Arrow.jl/issues/211
     # It is also the case that `Tables.schema(Tables.columns(table))` is more likely to return a `Tables.Schema`
-    # (rather than `nothing`) than a bare `table`, especially if `table::Vector`.  We should probably fix/improve
+    # (rather than `nothing`) than a bare `table`, especially if `table::Vector`. We should probably fix/improve
     # these upstream at some point.
-    columns = Tables.columns(table)
+    columns = _columns(table)
     validate && Legolas.validate(columns, schema)
     assign_to_table_metadata!(columns, (LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY => schema_qualified_string(schema),))
     write_arrow(io_or_path, columns; kwargs...)
@@ -129,7 +138,7 @@ function locations(collections::T) where {T<:Tuple}
 end
 
 function _iterator_for_column(table, c)
-    Tables.columnaccess(table) && return Tables.getcolumn(Tables.columns(table), c)
+    Tables.columnaccess(table) && return Tables.getcolumn(_columns(table), c)
     # there's not really a need to actually materialize this iterable
     # for the caller, but doing so allows the caller to more usefully
     # employ `eltype` on this function's output (since e.g. a generator
