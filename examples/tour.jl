@@ -135,6 +135,12 @@ schema = Schema("my-schema", 1)
 invalid = vcat(rows, Tables.rowmerge(row; a="this violates the schema's `a::Real` requirement"))
 @test_throws ArgumentError("field `a` has unexpected type; expected <:Real, found Any") Legolas.validate(invalid, schema)
 
+# This highlights two important properties regarding `Legolas.Schema` validation:
+#
+# - First, it's okay that the `e` field isn't present in this `Tables.Schema` because `my-schema` permits `e::Missing`.
+# - Second, field ordering is unimportant and is not considered when determining whether a give `Tables.`
+@test (Legolas.validate(Tables.Schema((:c, :d, :a, :b), Tuple{Vector,Int,Float64,String}), schema); true)
+
 # Legolas also provides `Legolas.write(path_or_io, table, schema; kwargs...)`, which wraps `Arrow.write(path_or_io, table; kwargs...)`
 # and performs two additional operations atop the usual operations performed by that function:
 #

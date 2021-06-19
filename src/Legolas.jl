@@ -14,6 +14,8 @@ originally constructed.
 lift(::Any, ::Union{Nothing,Missing}) = missing
 lift(f, x) = f(x)
 
+const LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY = "legolas_schema_qualified"
+
 include("rows.jl")
 include("tables.jl")
 

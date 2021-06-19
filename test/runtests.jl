@@ -1,4 +1,6 @@
-using Legolas, Test, DataFrames
+using Legolas, Test, DataFrames, Arrow
+
+using Legolas: Schema, @row, Row
 
 include(joinpath(dirname(@__DIR__), "examples", "tour.jl"))
 
@@ -72,4 +74,22 @@ end
     foo = Foo(Dict("a" => "b", "b" => "b"))
     @test foo.meta === Legolas.assign_to_table_metadata!(foo, ("b" => "c", "d" => "e"))
     @test foo.meta == Dict("a" => "b", "b" => "c", "d" => "e")
+end
+
+@testset "miscellaneous Legolas.Schema / Legolas.Row tests" begin
+    @test_throws ArgumentError("argument is not a valid `Legolas.Schema` name: \"bad_name?\"") Schema("bad_name?", 1)
+    @test_throws ArgumentError("argument is not a valid `Legolas.Schema` string: \"bad_name>?@1\"") Schema("bad_name>?@1")
+
+    @row("foo@1", x, y)
+    @row("bar@1" > "foo@1", z)
+    @test Legolas.schema_parent(Schema("bar", 1)) == Schema("foo", 1)
+
+    r = Row(Schema("bar", 1), (x=1, y=2, z=3))
+
+    @test propertynames(r) == (:z, :x, :y)
+    @test r === Row(Schema("bar", 1), r)
+    @test r === Row(Schema("bar", 1); x=1, y=2, z=3)
+    @test r === Row(Schema("bar", 1), first(Tables.rows(Arrow.Table(Arrow.tobuffer((x=[1],y=[2],z=[3]))))))
+    @test r[1] === 3
+    @test string(r) == "Row(Schema(\"bar@1\"), (z = 3, x = 1, y = 2))"
 end

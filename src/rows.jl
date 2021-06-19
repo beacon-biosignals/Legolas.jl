@@ -5,56 +5,87 @@
 const ALLOWED_SCHEMA_NAME_CHARACTERS = Char['-', '.', 'a':'z'..., '0':'9'...]
 
 """
-    TODO
+    Legolas.is_valid_schema_name(x::AbstractString)
+
+Return `true` if `x` is a valid schema name, return `false` otherwise.
+
+Valid schema names are lowercase, alphanumeric, and may contain hyphens or periods.
 """
 is_valid_schema_name(x::AbstractString) = all(i -> i in ALLOWED_SCHEMA_NAME_CHARACTERS, x)
 
 """
-    TODO
+    Legolas.Schema{name,version}
+
+A type representing the schema of a [`Legolas.Row`](@ref). The `name` (a `Symbol`) and `version` (an `Integer`)
+are surfaced as type parameters, allowing them to be utilized for dispatch.
+
+See also: [`schema_name`](@ref), [`schema_version`](@ref), [`schema_parent`](@ref)
 """
 struct Schema{name,version} end
 
 """
-    TODO
+    Legolas.Schema(name::AbstractString, version::Integer)
+
+Return `Legolas.Schema{Symbol(name),version}()`. This constructor will throw an `ArgumentError` if `name` is
+not a valid schema name.
+
+Prefer using this constructor over `Legolas.Schema{Symbol(name),version}()` directly.
 """
 function Schema(name::AbstractString, version::Integer)
-    is_valid_schema_name(name) || throw(ArgumentError("TODO"))
+    is_valid_schema_name(name) || throw(ArgumentError("argument is not a valid `Legolas.Schema` name: \"$name\""))
     return Schema{Symbol(name),version}()
 end
 
 """
-    TODO
+    Legolas.Schema(s::AbstractString)
+
+Return `Legolas.Schema(name, n)` where `s` is a valid schema identifier of the form `"name@n"`.
+
+`s` may also be a fully qualified schema identifier of the form `"name@n>...>..."`.
 """
-function Schema(str::AbstractString)
-    x = split(first(split(str, '>', limit=2)), '@')
+function Schema(s::AbstractString)
+    x = split(first(split(s, '>', limit=2)), '@')
     if length(x) == 2
         name, version = x
         version = tryparse(Int, version)
         version isa Int && return Schema(name, version)
     end
-    throw(ArgumentError("TODO"))
+    throw(ArgumentError("argument is not a valid `Legolas.Schema` string: \"$s\""))
 end
 
 """
-    TODO
-"""
-@inline schema_version(::Type{<:Schema{name,version}}) where {name,version} = version
-@inline schema_version(schema::Schema) = schema_version(typeof(schema))
+    schema_name(::Type{<:Legolas.Schema{name}})
+    schema_name(::Legolas.Schema{name})
 
-"""
-    TODO
+Return `name`.
 """
 @inline schema_name(::Type{<:Schema{name}}) where {name} = name
 @inline schema_name(schema::Schema) = schema_name(typeof(schema))
 
 """
-    TODO
+    schema_version(::Type{Legolas.Schema{name,version}})
+    schema_version(::Legolas.Schema{name,version})
+
+Return `version`.
+"""
+@inline schema_version(::Type{<:Schema{name,version}}) where {name,version} = version
+@inline schema_version(schema::Schema) = schema_version(typeof(schema))
+
+"""
+    schema_parent(::Type{Legolas.Schema{name,version}})
+    schema_parent(::Legolas.Schema{name,version})
+
+Return the `Legolas.Schema` instance that corresponds to the parent of the given `Legolas.Schema`.
 """
 @inline schema_parent(::Type{<:Schema}) = nothing
 @inline schema_parent(schema::Schema) = schema_parent(typeof(schema))
 
 """
-    TODO
+    schema_qualified_string(::Type{Legolas.Schema{name,version}})
+
+Return this `Legolas.Schema`'s fully qualified schema identifier string. This string is
+serialized as the `\"$LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY\"`` field value in table
+metadata for table written via [`Legolas.write`](@ref).
 """
 function schema_qualified_string end
 
