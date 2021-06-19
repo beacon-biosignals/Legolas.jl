@@ -93,3 +93,17 @@ end
     @test r[1] === 3
     @test string(r) == "Row(Schema(\"bar@1\"), (z = 3, x = 1, y = 2))"
 end
+
+@testset "generic path types" begin
+    struct MyPath
+        x::String
+    end
+    Base.read(p::MyPath) = Base.read(p.x)
+    Base.write(p::MyPath, bytes) = Base.write(p.x, bytes)
+    root = mktempdir()
+    path = MyPath(joinpath(root, "baz.arrow"))
+    Baz = @row("baz@1", a, b)
+    t = [Baz(a=1, b=2), Baz(a=3, b=4)]
+    Legolas.write(path, t, Schema("baz", 1))
+    @test t == Baz.(Tables.rows(Legolas.read(path)))
+end
