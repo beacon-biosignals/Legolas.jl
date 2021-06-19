@@ -7,4 +7,6 @@ makedocs(modules=[Legolas],
          pages=["API Documentation" => "index.md",
                 "Tips For Schema Authors" => "schema.md"])
 
-deploydocs(repo="github.com/beacon-biosignals/Legolas.jl.git", push_preview=true)
+deploydocs(repo="github.com/beacon-biosignals/Legolas.jl.git",
+           push_preview=true,
+           devbranch="main")
