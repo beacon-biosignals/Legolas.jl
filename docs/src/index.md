@@ -6,7 +6,7 @@ If you're a newcomer to Legolas.jl, please familiarize yourself with via the [to
 CurrentModule = Legolas
 ```
 
-## Legolas  `Schema`s and `Row`s
+## Legolas `Schema`s and `Row`s
 
 ```@docs
 Legolas.@row
@@ -17,7 +17,6 @@ Legolas.schema_name
 Legolas.schema_version
 Legolas.schema_qualified_string
 Legolas.schema_parent
-Legolas.transform
 ```
 
 ## Validating/Writing/Reading Legolas Tables

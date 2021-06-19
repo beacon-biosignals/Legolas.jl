@@ -12,7 +12,9 @@ end
 #####
 
 """
-    TODO
+    Legolas.validate(table, legolas_schema::Schema)
+
+TODO
 """
 function validate(table, legolas_schema::Schema)
     columns = _columns(table)
@@ -32,7 +34,9 @@ function validate(table, legolas_schema::Schema)
 end
 
 """
-    TODO
+    Legolas.validate(table)
+
+TODO
 """
 function validate(table)
     metadata = Arrow.getmetadata(table)
