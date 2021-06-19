@@ -1,7 +1,7 @@
 # Legolas.jl
 
 [![CI](https://github.com/beacon-biosignals/Legolas.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/beacon-biosignals/Legolas.jl/actions/workflows/CI.yml)
-[![codecov](https://codecov.io/gh/beacon-biosignals/Legolas.jl/branch/master/graph/badge.svg?token=D0bcI0Rtsw)](https://codecov.io/gh/beacon-biosignals/Legolas.jl)
+[![codecov](https://codecov.io/gh/beacon-biosignals/Legolas.jl/branch/main/graph/badge.svg?token=YW1TCLK18Y)](https://codecov.io/gh/beacon-biosignals/Legolas.jl)
 [![](https://img.shields.io/badge/docs-stable-blue.svg)](https://beacon-biosignals.github.io/Legolas.jl/stable)
 [![](https://img.shields.io/badge/docs-dev-blue.svg)](https://beacon-biosignals.github.io/Legolas.jl/dev)
 
