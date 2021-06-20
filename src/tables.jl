@@ -12,9 +12,11 @@ end
 #####
 
 """
-    Legolas.validate(table, legolas_schema::Schema)
+    Legolas.validate(table, legolas_schema::Legolas.Schema)
 
-TODO
+Attempt to determine `s::Tables.Schema` from `table` and return `Legolas.validate(s, legolas_schema)`.
+
+If a `Tables.Schema` cannot be determined, a warning message is logged and `nothing` is returned.
 """
 function validate(table, legolas_schema::Schema)
     columns = _columns(table)
@@ -36,7 +38,13 @@ end
 """
     Legolas.validate(table)
 
-TODO
+Attempt to determine `s::Legolas.Schema` from the `$LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY` field in `table`'s
+Arrow metadata and return `Legolas.validate(table, s)`.
+
+If the `$LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY` field isn't found or has an invalid value, this function
+will throw an `ArgumentError`.
+
+Otherwise, returns `nothing`.
 """
 function validate(table)
     metadata = Arrow.getmetadata(table)
@@ -50,16 +58,31 @@ end
 #####
 
 """
-    TODO
+    Legolas.read(io_or_path; validate::Bool=true)
+
+Read and return an `Arrow.Table` from `io_or_path`.
+
+If `validate` is `true`, `Legolas.validate` will be called on the table before it is returned.
+
+Note that `io_or_path` may be any type that supports `Base.read(io_or_path)::Vector{UInt8}`.
 """
-function read(path; validate::Bool=true)
-    table = read_arrow(path)
+function read(io_or_path; validate::Bool=true)
+    table = read_arrow(io_or_path)
     validate && Legolas.validate(table)
     return table
 end
 
 """
-    TODO
+    Legolas.write(io_or_path, table, schema::Schema; validate::Bool=true, kwargs...)
+
+Write `table` to `io_or_path`, inserting the appropriate `$LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY`
+field in the written out Arrow metadata.
+
+If `validate` is `true`, `Legolas.validate` will be called on the table before it written out.
+
+Any other provided `kwargs` are forwarded to an internal invocation of `Arrow.write`.
+
+Note that `io_or_path` may be any type that supports `Base.write(io_or_path, bytes::Vector{UInt8})`.
 """
 function write(io_or_path, table, schema::Schema; validate::Bool=true, kwargs...)
     # This `_columns` call is unfortunately necessary; ref https://github.com/JuliaData/Arrow.jl/issues/211
@@ -74,7 +97,12 @@ function write(io_or_path, table, schema::Schema; validate::Bool=true, kwargs...
 end
 
 """
-    TODO
+    Legolas.tobuffer(args...; kwargs...)
+
+A convenience function that constructs a fresh `io::IOBuffer`, calls
+`Legolas.write(io, args...; kwargs...)`, and returns `seekstart(io)`.
+
+Analogous to the `Arrow.tobuffer` function.
 """
 function tobuffer(args...; kwargs...)
     io = IOBuffer()
@@ -108,7 +136,14 @@ write_arrow(path, table; kwargs...) = (io = IOBuffer(); write_arrow(io, table; k
 # TODO: upstream to Arrow.jl?
 
 """
-    TODO
+    assign_to_table_metadata!(table, pairs)
+
+Assign the given `pairs` (an iterable of `Pair{String,String}`) to `table`'s associated
+Arrow metadata `Dict`, creating this metadata `Dict` if it doesn't already exist.
+
+Returns `table`'s associated Arrow metadata `Dict`.
+
+Please note https://github.com/JuliaData/Arrow.jl/issues/211 before using this function.
 
 Note that we intend to eventually migrate this function from Legolas.jl to a more appropriate package.
 """
@@ -181,22 +216,7 @@ Return a fully deserialized copy of `table`.
 
 This function is useful when `table` has built-in deserialize-on-access or
 conversion-on-access behavior (like `Arrow.Table`) and you'd like to pay
-such access costs upfront before repeatedly accessing the table. For example:
-
-TODO: make this example runnable
-
-```
-julia> items = read_table(path_to_file);
-
-# iterate through all elements of `items.nested_structures`
-julia> @time foreach(identity, (nested_structure for nested_structure in items.nested_structures));
-0.000126 seconds (306 allocations: 6.688 KiB)
-
-julia> materialized = Onda.materialize(items);
-
-julia> @time foreach(identity, (nested_structure for nested_structure in materialized.nested_structures));
-  0.000014 seconds (2 allocations: 80 bytes)
-```
+such access costs upfront before repeatedly accessing the table.
 
 Note that we intend to eventually migrate this function from Legolas.jl to a more appropriate package.
 """
