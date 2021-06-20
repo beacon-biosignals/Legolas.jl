@@ -92,6 +92,7 @@ end
 end
 
 @testset "miscellaneous Legolas.Schema / Legolas.Row tests" begin
+    @test_throws ArgumentError("`Legolas.Schema` version must be non-negative, recieved: -1") Schema("good_name", -1)
     @test_throws ArgumentError("argument is not a valid `Legolas.Schema` name: \"bad_name?\"") Schema("bad_name?", 1)
     @test_throws ArgumentError("argument is not a valid `Legolas.Schema` string: \"bad_name>?@1\"") Schema("bad_name>?@1")
 
