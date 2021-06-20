@@ -7,6 +7,6 @@
 
 *wield `.arrow`s with style*
 
-Legolas.jl is a Julia package that provides opinionated utilities for constructing, reading, writing, and validating Arrow tables against extensible, versioned, user-specified schemas.
+Legolas.jl is a Julia package that provides [Tables.jl](https://github.com/JuliaData/Tables.jl)-friendly mechanisms for constructing, reading, writing, and validating [Arrow](https://arrow.apache.org/) tables against extensible, versioned, user-specified schemas.
 
 Want to know more? [Take the tour!](https://github.com/beacon-biosignals/Legolas.jl/tree/master/examples/tour.jl)
