@@ -5,7 +5,7 @@
 [![](https://img.shields.io/badge/docs-stable-blue.svg)](https://beacon-biosignals.github.io/Legolas.jl/stable)
 [![](https://img.shields.io/badge/docs-dev-blue.svg)](https://beacon-biosignals.github.io/Legolas.jl/dev)
 
-*wield `.arrow`s with style*
+🏹 *wield `.arrow`s with style* 🏹 
 
 Legolas.jl is a Julia package that provides [Tables.jl](https://github.com/JuliaData/Tables.jl)-friendly mechanisms for constructing, reading, writing, and validating [Arrow](https://arrow.apache.org/) tables against extensible, versioned, user-specified schemas.
 
