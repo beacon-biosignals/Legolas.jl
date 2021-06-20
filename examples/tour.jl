@@ -178,6 +178,6 @@ Arrow.setmetadata!(invalid, Dict("legolas_schema_qualified" => "my-child-schema@
 
 # A note about one additional benefit of `Legolas.read`/`Legolas.write`: Unlike their Arrow.jl counterparts,
 # these functions are relatively agnostic to the types of provided path arguments. Generally, as long as a
-# given `path` supports `Base.read(path)::Vector{UInt8}`, `Base.write(path, bytes::Vector{UInt8})`, and
-# `mkpath(dirname(path))`, then `path` will work as an argument to `Legolas.read`/`Legolas.write`. At some
-# point, we'd like to make similar upstream improvements to Arrow.jl to render its API more path-type-agnostic.
+# given `path` supports `Base.read(path)::Vector{UInt8}` and `Base.write(path, bytes::Vector{UInt8})` then 
+# `path` will work as an argument to `Legolas.read`/`Legolas.write`. At some point, we'd like to make similar 
+# upstream improvements to Arrow.jl to render its API more path-type-agnostic.
