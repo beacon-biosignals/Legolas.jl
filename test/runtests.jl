@@ -110,5 +110,5 @@ end
 
 
     long_row = Row(Schema("bar", 1), (x=1, y=2, z=zeros(100, 100)))
-    @test length(sprint(show, long_row; context = :limit => true)) < 200
+    @test length(sprint(show, long_row; context=(:limit => true))) < 200
 end
