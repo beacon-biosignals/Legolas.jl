@@ -184,6 +184,7 @@ function Base.show(io::IO, row::Row)
     print(io, "Row($(getfield(row, :schema)), ")
     show(io, getfield(row, :fields))
     print(io, ")")
+    return nothing
 end
 
 function _parse_schema_expr(x)
