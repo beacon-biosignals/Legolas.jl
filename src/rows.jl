@@ -180,7 +180,12 @@ Tables.columnnames(row::Row) = Tables.columnnames(getfield(row, :fields))
 Base.:(==)(a::Row, b::Row) = getfield(a, :schema) == getfield(b, :schema) && getfield(a, :fields) == getfield(b, :fields)
 Base.isequal(a::Row, b::Row) = isequal(getfield(a, :schema), getfield(b, :schema)) && isequal(getfield(a, :fields), getfield(b, :fields))
 
-Base.show(io::IO, row::Row) = print(io, "Row($(getfield(row, :schema)), $(getfield(row, :fields)))")
+function Base.show(io::IO, row::Row)
+    print(io, "Row($(getfield(row, :schema)), ")
+    show(io, getfield(row, :fields))
+    print(io, ")")
+    return nothing
+end
 
 function _parse_schema_expr(x)
     if x isa Expr && x.head == :call && x.args[1] == :> && length(x.args) == 3
