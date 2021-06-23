@@ -35,6 +35,7 @@ not a valid schema name.
 Prefer using this constructor over `Legolas.Schema{Symbol(name),version}()` directly.
 """
 function Schema(name::AbstractString, version::Integer)
+    version >= 0 || throw(ArgumentError("`Legolas.Schema` version must be non-negative, recieved: $version"))
     is_valid_schema_name(name) || throw(ArgumentError("argument is not a valid `Legolas.Schema` name: \"$name\""))
     return Schema{Symbol(name),version}()
 end

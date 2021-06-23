@@ -6,6 +6,7 @@ makedocs(modules=[Legolas],
          authors="Beacon Biosignals, Inc.",
          pages=["API Documentation" => "index.md",
                 "Tips For Schema Authors" => "schema.md",
+                "Legolas Table Specification" => "specification.md",
                 "FAQ" => "faq.md"])
 
 deploydocs(repo="github.com/beacon-biosignals/Legolas.jl.git",
