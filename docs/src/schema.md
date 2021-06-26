@@ -30,7 +30,7 @@ When making deprecation/API decisions, keep in mind that multiple schema version
 
 # Naming Conventions
 
-1. Include a namespace. For example, assuming the schema is defined in `Foo.jl`, `foo.automobile` is good, `automobile` is bad.
+1. Include a namespace. For example, assuming the schema is defined in a package Foo.jl, `foo.automobile` is good, `automobile` is bad.
 2. Prefer singular over plural. For example, `foo.automobile` is good, `foo.automobiles` is bad.
 3. Don't overqualify the schema name; that's what the qualified schema identifier is for! For example, `bar.automobile@1>foo.automobile@1` is good, `baz.supercar@1>bar.automobile@1` is good, `bar.foo.automobile@1>foo.automobile@1` is bad, `baz.automobile.supercar@1>bar.automobile@1` is bad.
 4. When writing tables to files, use `*.<unqualified schema name>.arrow` as the file extension. For example, `filename.baz.supercar.arrow` is good, `filename.baz.supercar.bar.automobile.arrow` is bad, `baz.supercar.arrow` is bad.
