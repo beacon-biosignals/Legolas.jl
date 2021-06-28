@@ -1,6 +1,7 @@
 module Legolas
 
 using Tables, Arrow
+using Arrow.ArrowTypes
 
 """
     lift(f, x)

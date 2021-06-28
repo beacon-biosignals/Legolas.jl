@@ -181,3 +181,52 @@ Arrow.setmetadata!(invalid, Dict("legolas_schema_qualified" => "my-child-schema@
 # given `path` supports `Base.read(path)::Vector{UInt8}` and `Base.write(path, bytes::Vector{UInt8})` then 
 # `path` will work as an argument to `Legolas.read`/`Legolas.write`. At some point, we'd like to make similar 
 # upstream improvements to Arrow.jl to render its API more path-type-agnostic.
+
+#####
+##### Using `Legolas.Row`s as elements of tables
+#####
+
+# `Legolas.Row`s may be used as elements of tables (instead of as entire rows of tables),
+# as long as they do not have any "extra" columns, that is, only the required columns given
+# by a schema are present. If you have a need to serialize `Legolas.Row`s with additional
+# columns, considering simply defining a schema extension with those columns.
+
+# Let us see a somewhat complicated example, where we define a new type in a module `MyMod`,
+# and teach Arrow.jl how to serialize that, and then use this type inside a schema, which
+# we then serialize the resulting rows as elements of another schema.
+
+# First, we define a simple type.
+module MyMod
+    using Arrow.ArrowTypes
+    struct MyType
+        i::Int
+    end
+
+    const MYTYPE_NAME = Symbol("JuliaLang.MyMod.MyType")
+    ArrowTypes.arrowname(::Type{MyType}) = MYTYPE_NAME
+    ArrowTypes.JuliaType(::Val{MYTYPE_NAME}) = MyType
+    ArrowTypes.default(::Type{MyType}) = MyType(0)
+end
+
+# Now, we define our inner schema, similar to `MyRow` defined earlier.
+
+const MyInnerRow = @row("my-inner-schema@1",
+                   a::Real = sin(a),
+                   b::String = string(a, b, c),
+                   c = [a, b, c],
+                   d::Int,
+                   e::MyMod.MyType)
+
+# And the outer schema will just be:
+
+const MyOuterRow = @row("my-outer-schema@1",
+                        a::String,
+                        x::Union{Missing, <:MyInnerRow})
+
+inner1 = MyInnerRow(a=1.5, b="hello", c="goodbye", d=2, e=MyMod.MyType(1))
+inner2 = MyInnerRow(a=1f0, b="hello", c=missing, d=0, e=MyMod.MyType(2))
+
+table = [MyOuterRow(; a="first", x = inner1), MyOuterRow(; a="second", x=inner2)]
+
+roundtripped_table = MyOuterRow.(Tables.rowtable(Arrow.Table(Arrow.tobuffer(table))))
+@test all(isequal.(roundtripped_table, table))

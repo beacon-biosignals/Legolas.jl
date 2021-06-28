@@ -143,6 +143,9 @@ end
 
 Base.show(io::IO, schema::Schema) = print(io, "Schema(\"$(schema_name(schema))@$(schema_version(schema))\")")
 
+# internal function to construct a NamedTuple type from a `Schema`
+minimal_nt_type(::Type{S}) where {S} = NamedTuple{row_required_names(S), row_required_types(S)}
+
 #####
 ##### Row
 #####
@@ -162,6 +165,13 @@ struct Row{S<:Schema,F} <: Tables.AbstractRow
     function Row(schema::Schema; fields...)
         fields = transform(schema; fields...)
         return new{typeof(schema),typeof(fields)}(schema, fields)
+    end
+    function Row{S, F}(fields::F) where {S<:Schema, F<:NamedTuple}
+        if nt_names(F) != row_required_names(S) || nt_values(F) != row_required_types(S)
+            error("Secret inner constructor is only for Arrow deserialization.")
+        end
+        schema = S()
+        return new{S, F}(schema, fields)
     end
 end
 
@@ -198,6 +208,9 @@ function _parse_schema_expr(x)
 end
 
 _parse_schema_expr(str::AbstractString) = Schema(str), nothing
+
+function row_required_names end
+function row_required_types end
 
 """
     @row("name@version", field_expressions...)
@@ -249,6 +262,17 @@ macro row(schema_expr, fields...)
         parent_transform = :(fields = transform($quoted_parent; fields...))
         parent_validate = :(validate(tables_schema, $quoted_parent))
     end
+
+    f_names = map(fields) do f
+        name, _ = f.args[1].args
+        return :($(Base.Meta.quot(name)))
+    end
+
+    f_types = map(fields) do f
+        _, type = f.args[1].args
+        return esc(type)
+    end
+
     return quote
         Legolas.schema_qualified_string(::$schema_type) = $schema_qualified_string
 
@@ -274,6 +298,94 @@ macro row(schema_expr, fields...)
             return _validate(tables_schema, legolas_schema)
         end
 
+        function Legolas.row_required_names(::Type{$schema_type})
+            return tuple($(f_names...))
+        end
+
+        function Legolas.row_required_types(::Type{$schema_type})
+            return Tuple{$(f_types...)}
+        end
+
         Legolas.Row{$schema_type}
     end
 end
+
+# Serializing `Schema`'s
+const SCHEMA_ARROW_NAME = Symbol("JuliaLang.Legolas.Schema")
+ArrowTypes.arrowname(::Type{<:Legolas.Schema}) = SCHEMA_ARROW_NAME
+ArrowTypes.JuliaType(::Val{SCHEMA_ARROW_NAME}) = Schema
+
+# `_` is not in `ALLOWED_SCHEMA_NAME_CHARACTERS`, so we use it as a separator here:
+ArrowTypes.arrowmetadata(::Type{Schema{name, version}}) where {name, version} = string(name, "_", version)
+
+function ArrowTypes.JuliaType(::Val{SCHEMA_ARROW_NAME}, ::Type{NamedTuple{names, types}}, meta) where {names, types}
+    @info 3
+    name, version = split(meta, "_")
+    return Schema{Symbol(name), parse(Int, version)}
+end
+
+# Serializing `Row`'s
+
+# function ArrowTypes.arrowname(::Type{Row{S,F}}) where {S, F}
+#      if nt_names(F) != row_required_names(S)
+#         extras = setdiff(row_required_names(S), nt_names(F))
+#         error("Can serialize an `Legolas.Row` as an element of an Arrow table when no extra columns are present. Extra columns: $extras")
+#      end
+#     return ROW_ARROW_NAME
+# end
+
+# ArrowTypes.arrowname(::Type{Row{S}}) where {S} = ROW_ARROW_NAME
+
+# function ArrowTypes.JuliaType(::Val{ROW_ARROW_NAME}, ::Type{NamedTuple{struct_names, struct_types}}, meta) where {struct_names, struct_types}
+#     @info 2
+#     schema_type = Base.tuple_type_head(struct_types)
+#     return Row{schema_type, minimal_nt_type(schema_type)}
+# end
+
+function ArrowTypes.ArrowKind(::Type{Row{S}}) where S
+    return ArrowTypes.ArrowKind(minimal_nt_type(S))
+end
+
+function ArrowTypes.ArrowType(::Type{Row{S}}) where S
+    return ArrowTypes.ArrowType(minimal_nt_type(S))
+end
+
+function ArrowTypes.toarrow(row::Row{S}) where S
+    F = minimal_nt_type(S)
+    result = convert(F, NamedTuple(row))
+    @info "toarrow" result
+    return result
+end
+
+ArrowTypes.arrowmetadata(::Type{Row{Schema{name, version}}}) where {name, version} = string(name, "_", version)
+
+
+const ROW_ARROW_NAME = Symbol("JuliaLang.Legolas.Row")
+ArrowTypes.arrowname(::Type{Row}) = ROW_ARROW_NAME
+
+function ArrowTypes.JuliaType(::Val{ROW_ARROW_NAME}, ::Type{NamedTuple{struct_names, struct_types}}, meta) where {struct_names, struct_types}
+    @info "JuliaType" meta
+    name, version = split(meta, "_")
+    S = Schema{Symbol(name), parse(Int, version)}
+    return Row{S, minimal_nt_type(S)}
+end
+
+function ArrowTypes.fromarrow(::Type{Row{S, F}}, fields...) where {S, F}
+    @info "fromarrow" fields
+    # F = minimal_nt_type(S)
+    # a = map(fromarrow, Tuple(nt_values(F2).types), Tuple(fields))
+    # b = convert(nt_values(F), a)
+    # new_fields = convert(F, NamedTuple{nt_names(F)}(b))
+    return Row{S, F}(F(fields))
+end
+
+# function ArrowTypes.fromarrow(::Type{Row{S}}, schema::S, fields::F2) where {S, F2}
+#     F = minimal_nt_type(S)
+#     a = map(fromarrow, Tuple(nt_values(F2).types), Tuple(fields))
+#     b = convert(nt_values(F), a)
+#     new_fields = convert(F, NamedTuple{nt_names(F)}(b))
+#     return Row{S, F}(schema, new_fields)
+# end
+
+nt_names(::Type{NamedTuple{K, V}}) where {K, V} = K
+nt_values(::Type{NamedTuple{K, V}}) where {K, V} = V
