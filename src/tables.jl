@@ -162,8 +162,36 @@ end
 #####
 ##### Tables.jl operations
 #####
-# TODO: Upstream these to a more appropriate location?
 
+"""
+    locations(collections::Tuple)
+
+Return a `Dict` whose keys are the set of all elements across all provided collections,
+and whose values are the indices that locate each corresponding element across all
+provided collecitons.
+
+Specifically, `locations(collections)[k][i]` will return a `Vector{Int}` whose elements
+are the index locations of `k` in `collections[i]`. If `!(k in collections[i])`, this
+`Vector{Int}` will be empty.
+
+For example:
+
+```
+julia> Legolas.locations((['a', 'b', 'c', 'f', 'b'],
+                          ['d', 'c', 'e', 'b'],
+                          ['f', 'a', 'f']))
+Dict{Char, Tuple{Vector{Int64}, Vector{Int64}, Vector{Int64}}} with 6 entries:
+  'f' => ([4], [], [1, 3])
+  'a' => ([1], [], [2])
+  'c' => ([3], [2], [])
+  'd' => ([], [1], [])
+  'e' => ([], [3], [])
+  'b' => ([2, 5], [4], [])
+```
+
+This function is useful as a building block for higher-level tabular operations
+that require indexing/grouping along specific sets of elements.
+"""
 function locations(collections::T) where {T<:Tuple}
     N = fieldcount(T)
     K = promote_type(eltype.(collections)...)
