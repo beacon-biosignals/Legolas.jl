@@ -33,5 +33,6 @@ Legolas.read
 Legolas.lift
 Legolas.assign_to_table_metadata!
 Legolas.gather
+Legolas.locations
 Legolas.materialize
 ```

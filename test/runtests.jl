@@ -10,6 +10,19 @@ include(joinpath(dirname(@__DIR__), "examples", "tour.jl"))
     @test Legolas.lift(sin, 1.0) == sin(1.0)
 end
 
+@testset "Legolas.location" begin
+    collections = (['a', 'b', 'c', 'f', 'b'],
+                   ['d', 'c', 'e', 'b'],
+                   ['f', 'a', 'f'])
+    expected = Dict('f' => ([4], [], [1, 3]),
+                    'a' => ([1], [], [2]),
+                    'c' => ([3], [2], []),
+                    'd' => ([], [1], []),
+                    'e' => ([], [3], []),
+                    'b' => ([2, 5], [4], []))
+    @test Legolas.locations(collections) == expected
+end
+
 @testset "Legolas.gather" begin
     a = [(x=1, y="a", z="k"),
          (x=2, y="b", z="j"),
