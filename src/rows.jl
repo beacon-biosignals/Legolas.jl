@@ -278,7 +278,14 @@ macro row(schema_expr, fields...)
     end
 end
 
-# support (de)serialization as an Arrow column value via Arrow.ArrowTypes overloads
+# Support (de)serialization as an Arrow column value via Arrow.ArrowTypes overloads.
+#
+# Note that this only really works in relatively simple cases; rely on this at your own peril.
+# See https://github.com/JuliaData/Arrow.jl/issues/230 for more details.
+# 
+# Note also that the limited support here that DOES work participates in SemVer,
+# e.g. if we break this in future Legolas versions we should treat it as a breaking 
+# change and bump version numbers accordingly. 
 
 const LEGOLAS_ROW_ARROW_NAME = Symbol("JuliaLang.Legolas.Row")
 Arrow.ArrowTypes.arrowname(::Type{<:Legolas.Row}) = LEGOLAS_ROW_ARROW_NAME
