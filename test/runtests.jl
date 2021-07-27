@@ -8,6 +8,9 @@ include(joinpath(dirname(@__DIR__), "examples", "tour.jl"))
     @test ismissing(Legolas.lift(sin, nothing))
     @test ismissing(Legolas.lift(sin, missing))
     @test Legolas.lift(sin, 1.0) == sin(1.0)
+    @test ismissing(Legolas.lift(sin)(nothing))
+    @test ismissing(Legolas.lift(sin)(missing))
+    @test Legolas.lift(sin)(1.0) == sin(1.0)
 end
 
 @testset "Legolas.location" begin
