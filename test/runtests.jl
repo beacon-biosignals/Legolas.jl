@@ -122,6 +122,8 @@ end
     @test r[1] === 3
     @test string(r) == "Row(Schema(\"bar@1\"), (z = 3, x = 1, y = 2))"
 
+    tbl = Arrow.Table(Arrow.tobuffer((x=[r],)))
+    @test r === tbl.x[1]
 
     long_row = Row(Schema("bar", 1), (x=1, y=2, z=zeros(100, 100)))
     @test length(sprint(show, long_row; context=(:limit => true))) < 200
