@@ -82,8 +82,7 @@ row = MyRow(a=1.5, b="hello", c="goodbye", my_other_field=":)", d=2, e=["anythin
 #     - ...may contain any other fields in addition to the required fields
 # - Outputs of `Legolas.Row` constructors...
 #     - ...will contain all required fields ("missing" fields are explicitly presented with `missing` values)
-#     - ...will order all required fields as specificed by the input `Schema`
-#     - ...will contain all given non-required fields after required fields, in the order provided by the caller
+#     - ...will contain all provided non-required fields
 
 #####
 ##### Extending Existing Rows/Schemas
