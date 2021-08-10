@@ -85,7 +85,7 @@ Return the `Legolas.Schema` instance that corresponds to the parent of the given
 @inline schema_parent(schema::Schema) = schema_parent(typeof(schema))
 
 """
-    schema_qualified_string(::Type{Legolas.Schema{name,version}})
+    schema_qualified_string(::Legolas.Schema{name,version})
 
 Return this `Legolas.Schema`'s fully qualified schema identifier string. This string is
 serialized as the `\"$LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY\"`` field value in table
@@ -282,10 +282,10 @@ end
 #
 # Note that this only really works in relatively simple cases; rely on this at your own peril.
 # See https://github.com/JuliaData/Arrow.jl/issues/230 for more details.
-# 
+#
 # Note also that the limited support here that DOES work participates in SemVer,
-# e.g. if we break this in future Legolas versions we should treat it as a breaking 
-# change and bump version numbers accordingly. 
+# e.g. if we break this in future Legolas versions we should treat it as a breaking
+# change and bump version numbers accordingly.
 
 const LEGOLAS_ROW_ARROW_NAME = Symbol("JuliaLang.Legolas.Row")
 Arrow.ArrowTypes.arrowname(::Type{<:Legolas.Row}) = LEGOLAS_ROW_ARROW_NAME
