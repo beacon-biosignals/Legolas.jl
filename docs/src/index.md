@@ -22,6 +22,7 @@ Legolas.schema_parent
 ## Validating/Writing/Reading Legolas Tables
 
 ```@docs
+Legolas.extract_schema
 Legolas.validate
 Legolas.write
 Legolas.read

@@ -83,14 +83,6 @@ end
 end
 
 @testset "miscellaneous Legolas/src/tables.jl tests" begin
-    struct Foo
-        meta
-    end
-    Legolas.Arrow.getmetadata(foo::Foo) = foo.meta
-    foo = Foo(Dict("a" => "b", "b" => "b"))
-    @test foo.meta === Legolas.assign_to_table_metadata!(foo, ("b" => "c", "d" => "e"))
-    @test foo.meta == Dict("a" => "b", "b" => "c", "d" => "e")
-
     struct MyPath
         x::String
     end
@@ -102,6 +94,14 @@ end
     t = [Baz(a=1, b=2), Baz(a=3, b=4)]
     Legolas.write(path, t, Schema("baz", 1))
     @test t == Baz.(Tables.rows(Legolas.read(path)))
+
+    struct Foo
+        meta
+    end
+    Legolas.Arrow.getmetadata(foo::Foo) = foo.meta
+    foo = Foo(Dict("a" => "b", "b" => "b",
+                   Legolas.LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY => "baz@1"))
+    @test Legolas.Schema("baz", 1) == Legolas.extract_schema(foo)
 
     t = [(a="a", c=1, b="b"), Baz(a=1, b=2)] # not a valid Tables.jl table
     @test_throws ErrorException Legolas.validate(t, Schema("baz", 1))

@@ -12,6 +12,25 @@ end
 #####
 
 """
+    Legolas.extract_schema(table)
+
+Attempt to extract Arrow metadata from `table` via `Arrow.getmetadata(table)`.
+
+If Arrow metadata is present and contains `\"$LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY\" => s`, return [`Legolas.Schema(s)`](@ref).
+
+Otherwise, return `nothing`.
+"""
+function extract_schema(table)
+    metadata = Arrow.getmetadata(table)
+    if !isnothing(metadata)
+        for (k, v) in metadata
+            k == LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY && return Schema(v)
+        end
+    end
+    return nothing
+end
+
+"""
     Legolas.validate(table, legolas_schema::Legolas.Schema)
 
 Attempt to determine `s::Tables.Schema` from `table` and return `Legolas.validate(s, legolas_schema)`.
@@ -38,19 +57,18 @@ end
 """
     Legolas.validate(table)
 
-Attempt to determine `s::Legolas.Schema` from the `$LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY` field in `table`'s
-Arrow metadata and return `Legolas.validate(table, s)`.
+If [`Legolas.extract_schema(table)`](@ref) returns a valid `Legolas.Schema`, return `Legolas.validate(table, Legolas.extract_schema(table))`.
 
-If the `$LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY` field isn't found or has an invalid value, this function
-will throw an `ArgumentError`.
-
-Otherwise, returns `nothing`.
+Otherwise, if a `Legolas.Schema` isn't found or is invalid, an `ArgumentError` is thrown.
 """
 function validate(table)
-    metadata = Arrow.getmetadata(table)
-    (metadata isa Dict && haskey(metadata, LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY)) || throw(ArgumentError("`$LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY` field not found in Arrow table metadata"))
-    validate(table, Schema(metadata[LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY]))
-    return nothing
+    schema = Legolas.extract_schema(table)
+    isnothing(schema) && throw(ArgumentError("""
+                                             could not extract valid `Legolas.Schema` from provided Arrow table;
+                                             is it missing the expected custom metadata and/or the expected
+                                             \"$LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY\" field?
+                                             """))
+    return validate(table, schema)
 end
 
 #####
@@ -84,15 +102,17 @@ Any other provided `kwargs` are forwarded to an internal invocation of `Arrow.wr
 
 Note that `io_or_path` may be any type that supports `Base.write(io_or_path, bytes::Vector{UInt8})`.
 """
-function write(io_or_path, table, schema::Schema; validate::Bool=true, kwargs...)
-    # This `_columns` call is unfortunately necessary; ref https://github.com/JuliaData/Arrow.jl/issues/211
-    # It is also the case that `Tables.schema(Tables.columns(table))` is more likely to return a `Tables.Schema`
-    # (rather than `nothing`) than a bare `table`, especially if `table::Vector`. We should probably fix/improve
-    # these upstream at some point.
-    columns = _columns(table)
-    validate && Legolas.validate(columns, schema)
-    assign_to_table_metadata!(columns, (LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY => schema_qualified_string(schema),))
-    write_arrow(io_or_path, columns; kwargs...)
+function write(io_or_path, table, schema::Schema; validate::Bool=true,
+               metadata=Arrow.getmetadata(table), kwargs...)
+    validate && Legolas.validate(table, schema)
+    schema_metadata = LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY => schema_qualified_string(schema)
+    if isnothing(metadata)
+        metadata = (schema_metadata,)
+    else
+        metadata = Set(collect(metadata))
+        push!(metadata, schema_metadata)
+    end
+    write_arrow(io_or_path, table; metadata, kwargs...)
     return table
 end
 
@@ -129,35 +149,6 @@ read_arrow(path) = read_arrow(Base.read(path))
 write_arrow(path::String, table; kwargs...) = Arrow.write(path, table; kwargs...)
 write_arrow(io::IO, table; kwargs...) = Arrow.write(io, table; file=get(kwargs, :file, true), kwargs...)
 write_arrow(path, table; kwargs...) = (io = IOBuffer(); write_arrow(io, table; kwargs...); write_full_path(path, take!(io)))
-
-#####
-##### Arrow.Table metadata manipulation
-#####
-# TODO: upstream to Arrow.jl?
-
-"""
-    assign_to_table_metadata!(table, pairs)
-
-Assign the given `pairs` (an iterable of `Pair{String,String}`) to `table`'s associated
-Arrow metadata `Dict`, creating this metadata `Dict` if it doesn't already exist.
-
-Returns `table`'s associated Arrow metadata `Dict`.
-
-Please note https://github.com/JuliaData/Arrow.jl/issues/211 before using this function.
-
-Note that we intend to eventually migrate this function from Legolas.jl to a more appropriate package.
-"""
-function assign_to_table_metadata!(table, pairs)
-    m = Arrow.getmetadata(table)
-    if !(m isa Dict)
-        m = Dict{String,String}()
-        Arrow.setmetadata!(table, m)
-    end
-    for (k, v) in pairs
-        m[k] = v
-    end
-    return m
-end
 
 #####
 ##### Tables.jl operations
