@@ -112,7 +112,7 @@ function write(io_or_path, table, schema::Schema; validate::Bool=true,
         metadata = Set(collect(metadata))
         push!(metadata, schema_metadata)
     end
-    write_arrow(io_or_path, table; metadata, kwargs...)
+    write_arrow(io_or_path, table; metadata=metadata, kwargs...)
     return table
 end
 
