@@ -94,6 +94,9 @@ end
     t = [Baz(a=1, b=2), Baz(a=3, b=4)]
     Legolas.write(path, t, Schema("baz", 1))
     @test t == Baz.(Tables.rows(Legolas.read(path)))
+    tbl = Arrow.Table(Legolas.tobuffer(t, Schema("baz", 1); metadata=("a" => "b", "c" => "d")))
+    @test Set(Arrow.getmetadata(tbl)) == Set((Legolas.LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY => "baz@1",
+                                              "a" => "b", "c" => "d"))
 
     struct Foo
         meta
