@@ -131,3 +131,16 @@ end
     long_row = Row(Schema("bar", 1), (x=1, y=2, z=zeros(100, 100)))
     @test length(sprint(show, long_row; context=(:limit => true))) < 200
 end
+
+@testset "isequal, hash" begin
+    TestRow = @row("testrow@1", x, y)
+
+    foo = TestRow(; x = [1])
+    foo2 = TestRow(; x = [1])
+    @test isequal(foo, foo2)
+    @test hash(foo) == hash(foo2)
+
+    foo3 = TestRow(; x = [3])
+    @test !isequal(foo, foo3)
+    @test hash(foo) != hash(foo3)
+end
