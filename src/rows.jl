@@ -180,6 +180,7 @@ Tables.columnnames(row::Row) = Tables.columnnames(getfield(row, :fields))
 
 Base.:(==)(a::Row, b::Row) = getfield(a, :schema) == getfield(b, :schema) && getfield(a, :fields) == getfield(b, :fields)
 Base.isequal(a::Row, b::Row) = isequal(getfield(a, :schema), getfield(b, :schema)) && isequal(getfield(a, :fields), getfield(b, :fields))
+Base.hash(a::Row, h::UInt) = hash(Row, hash(getfield(a, :schema), hash(getfield(a, :fields), h)))
 
 function Base.show(io::IO, row::Row)
     print(io, "Row($(getfield(row, :schema)), ")
