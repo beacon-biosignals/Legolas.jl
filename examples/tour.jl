@@ -170,13 +170,18 @@ invalid = vcat(rows, Tables.rowmerge(child; a="this violates the schema's `a::Re
 # Similarly, Legolas provides `Legolas.read(path_or_io)`, which wraps `Arrow.Table(path_or_io)`
 # and performs `Legolas.validate` on the resulting `Arrow.Table` before returning it.
 @test table_isequal(Legolas.read(Legolas.tobuffer(rows, schema)), t)
-@test_throws ArgumentError("`legolas_schema_qualified` field not found in Arrow table metadata") Legolas.read(Arrow.tobuffer(rows))
-invalid = Tables.columns(invalid) # ref https://github.com/JuliaData/Arrow.jl/issues/211
-Arrow.setmetadata!(invalid, Dict("legolas_schema_qualified" => "my-child-schema@1>my-schema@1"))
-@test_throws ArgumentError("field `a` has unexpected type; expected <:Real, found Union{Missing, Float64, String}") Legolas.read(Arrow.tobuffer(invalid))
+msg = """
+      could not extract valid `Legolas.Schema` from provided Arrow table;
+      is it missing the expected custom metadata and/or the expected
+      \"legolas_schema_qualified\" field?
+      """
+@test_throws ArgumentError(msg) Legolas.read(Arrow.tobuffer(rows))
+invalid_but_has_schema_metadata = Arrow.tobuffer(invalid;
+                                                 metadata = ("legolas_schema_qualified" => Legolas.schema_qualified_string(schema),))
+@test_throws ArgumentError("field `a` has unexpected type; expected <:Real, found Union{Missing, Float64, String}") Legolas.read(invalid_but_has_schema_metadata)
 
 # A note about one additional benefit of `Legolas.read`/`Legolas.write`: Unlike their Arrow.jl counterparts,
 # these functions are relatively agnostic to the types of provided path arguments. Generally, as long as a
-# given `path` supports `Base.read(path)::Vector{UInt8}` and `Base.write(path, bytes::Vector{UInt8})` then 
-# `path` will work as an argument to `Legolas.read`/`Legolas.write`. At some point, we'd like to make similar 
+# given `path` supports `Base.read(path)::Vector{UInt8}` and `Base.write(path, bytes::Vector{UInt8})` then
+# `path` will work as an argument to `Legolas.read`/`Legolas.write`. At some point, we'd like to make similar
 # upstream improvements to Arrow.jl to render its API more path-type-agnostic.
