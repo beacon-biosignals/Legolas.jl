@@ -94,7 +94,9 @@ row = MyRow(a=1.5, b="hello", c="goodbye", my_other_field=":)", d=2, e=["anythin
 # Declare a row type whose schema is named `"my-child-schema"` at version `1` that inherits the fields of the
 # `my-schema@1` schema that we defined in the previous section.
 const MyChildRow = @row("my-child-schema@1" > "my-schema@1",
-                        f::Int = f + 1,
+                        d, # "declaring" the underlying `my-schema@1` field here so that it
+                           # can be referenced in our definition for the `f` field.
+                        f::Int = f + d,
                         g::String,
                         c = last(c))
 
@@ -107,8 +109,13 @@ child = MyChildRow(input)
 @test child.c == "goodbye"
 @test child.d == 2
 @test child.e == ["anything"]
-@test child.f == 4
+@test child.f == 5
 @test child.g == "foo"
+
+# Note that even though we didn't write down any constraints on `d` in our `my-child-schema@1` definition,
+# that field still undergoes the parent transformation (defined by `my-schema@1`) where it is constrained
+# to `d::Int`.
+@test_throws InexactError MyChildRow(Tables.rowmerge(child; d=1.5))
 
 # A note on syntax: You might ask "Why use `>` as the inheritance operator instead of `<:`?" There are actually three reasons. Firstly,
 # `<:` is canonically a subtyping operator that implies the Liskov substition principle, but because Legolas allow arbitrary RHS code in
