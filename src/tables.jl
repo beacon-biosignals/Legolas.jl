@@ -140,8 +140,7 @@ end
 #
 # TODO: upstream improvements to Arrow.jl to obviate these?
 
-write_full_path(path::AbstractString, bytes) = (mkpath(dirname(path)); Base.write(path, bytes))
-write_full_path(path, bytes) = Base.write(path, bytes)
+write_full_path(path, bytes) = (mkpath(dirname(path)); Base.write(path, bytes))
 
 read_arrow(io_or_path::Union{IO,String,Vector{UInt8}}) = Arrow.Table(io_or_path)
 read_arrow(path) = read_arrow(Base.read(path))

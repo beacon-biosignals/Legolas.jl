@@ -4,6 +4,19 @@ using Legolas: Schema, @row, Row
 
 include(joinpath(dirname(@__DIR__), "examples", "tour.jl"))
 
+# A custom path type akin to those from FilePathsBase.jl
+struct MyPath
+    x::String
+end
+Base.read(p::MyPath) = read(p.x)
+Base.write(p::MyPath, bytes) = write(p.x, bytes)
+Base.joinpath(p::MyPath, paths...) = MyPath(joinpath(p.x, paths...))
+Base.stat(p::MyPath) = stat(p.x)  # Required for `isfile`
+
+# Emulating `S3Path`'s behavior of only making directories that end with a slash
+Base.dirname(p::MyPath) = MyPath(dirname(p.x) * '/')
+Base.mkpath(p::MyPath) = endswith(p.x, '/') ? mkpath(p.x) : error("MyPath folders must end with '/': $(p.x)")
+
 @testset "Legolas.lift" begin
     @test ismissing(Legolas.lift(sin, nothing))
     @test ismissing(Legolas.lift(sin, missing))
@@ -83,11 +96,6 @@ end
 end
 
 @testset "miscellaneous Legolas/src/tables.jl tests" begin
-    struct MyPath
-        x::String
-    end
-    Base.read(p::MyPath) = Base.read(p.x)
-    Base.write(p::MyPath, bytes) = Base.write(p.x, bytes)
     root = mktempdir()
     path = MyPath(joinpath(root, "baz.arrow"))
     Baz = @row("baz@1", a, b)
@@ -146,4 +154,16 @@ end
     foo3 = TestRow(; x = [3])
     @test !isequal(foo, foo3)
     @test hash(foo) != hash(foo3)
+end
+
+@testset "write_full_path" begin
+    mktempdir() do dir
+        p = joinpath(dir, "a", "file")
+        Legolas.write_full_path(p, b"\0")
+        @test isfile(p)
+
+        p = MyPath(joinpath(dir, "b", "file"))
+        Legolas.write_full_path(p, b"\0")
+        @test isfile(p)
+    end
 end
