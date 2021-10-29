@@ -133,6 +133,14 @@ end
 
     long_row = Row(Schema("bar", 1), (x=1, y=2, z=zeros(100, 100)))
     @test length(sprint(show, long_row; context=(:limit => true))) < 200
+
+    @testset "Legolas.Row convert" begin
+        nt = (; x=1, y=2, z=3, custom="foo")
+        v = Row{Schema{:bar, 1}}[]
+        push!(v, nt)
+
+        @test first(v) == Row(Schema("bar", 1), nt)
+    end
 end
 
 @testset "isequal, hash" begin
