@@ -171,6 +171,9 @@ Row(schema::Schema, fields) = Row(schema, NamedTuple(Tables.Row(fields)))
 Row(schema::Schema, fields::Row) = Row(schema, getfield(fields, :fields))
 Row(schema::Schema, fields::NamedTuple) = Row(schema; fields...)
 
+Base.convert(::Type{Row{S}}, fields) where {S} = Row(S(), fields)
+Base.convert(::Type{Row{S}}, fields::Row) where {S} = Row(S(), fields)  # Dispatch ambiguity fix
+
 Base.propertynames(row::Row) = propertynames(getfield(row, :fields))
 Base.getproperty(row::Row, name::Symbol) = getproperty(getfield(row, :fields), name)
 
