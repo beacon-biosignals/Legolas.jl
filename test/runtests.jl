@@ -108,6 +108,9 @@ end
 
     t = [(a="a", c=1, b="b"), Baz(a=1, b=2)] # not a valid Tables.jl table
     @test_throws ErrorException Legolas.validate(t, Schema("baz", 1))
+
+    t = Arrow.tobuffer((a=[1, 2], b=[3, 4]); metadata=Dict(Legolas.LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY => "haha@3"))
+    @test_throws Legolas.UnknownSchemaError Legolas.read(t)
 end
 
 @testset "miscellaneous Legolas.Schema / Legolas.Row tests" begin
@@ -133,6 +136,10 @@ end
 
     long_row = Row(Schema("bar", 1), (x=1, y=2, z=zeros(100, 100)))
     @test length(sprint(show, long_row; context=(:limit => true))) < 200
+
+    @test_throws Legolas.UnknownSchemaError Legolas.transform(Legolas.Schema("imadethisup@3"); a = 1, b = 2)
+    @test_throws Legolas.UnknownSchemaError Legolas.validate(Tables.Schema((:a, :b), (Int, Int)), Legolas.Schema("imadethisup@3"))
+    @test_throws Legolas.UnknownSchemaError Legolas.schema_qualified_string(Legolas.Schema("imadethisup@3"))
 end
 
 @testset "isequal, hash" begin
