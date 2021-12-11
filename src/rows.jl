@@ -57,6 +57,9 @@ function Schema(s::AbstractString)
     throw(ArgumentError("argument is not a valid `Legolas.Schema` string: \"$s\""))
 end
 
+Schema(::Type{S}) where {S<:Schema} = S()
+Schema(schema::Schema) = schema
+
 """
     schema_name(::Type{<:Legolas.Schema{name}})
     schema_name(::Legolas.Schema{name})
@@ -198,6 +201,16 @@ Row{S}(args...; kwargs...) where {S} = Row(S(), args...; kwargs...)
 Row(schema::Schema, fields) = Row(schema, NamedTuple(Tables.Row(fields)))
 Row(schema::Schema, fields::Row) = Row(schema, getfield(fields, :fields))
 Row(schema::Schema, fields::NamedTuple) = Row(schema; fields...)
+
+"""
+    Legolas.Schema(row::Row)
+    Legolas.Schema(::Type{<:Row})
+
+Return the schema for the given [`Legolas.Row`](@ref) or row type.
+"""
+Schema(row::Row) = Schema(typeof(row))
+Schema(::Type{Row{S}}) where {S} = S()
+Schema(::Type{Row{S,F}}) where {S,F} = S()
 
 Base.propertynames(row::Row) = propertynames(getfield(row, :fields))
 Base.getproperty(row::Row, name::Symbol) = getproperty(getfield(row, :fields), name)

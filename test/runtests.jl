@@ -92,11 +92,13 @@ end
     path = MyPath(joinpath(root, "baz.arrow"))
     Baz = @row("baz@1", a, b)
     t = [Baz(a=1, b=2), Baz(a=3, b=4)]
-    Legolas.write(path, t, Schema("baz", 1))
-    @test t == Baz.(Tables.rows(Legolas.read(path)))
-    tbl = Arrow.Table(Legolas.tobuffer(t, Schema("baz", 1); metadata=("a" => "b", "c" => "d")))
-    @test Set(Arrow.getmetadata(tbl)) == Set((Legolas.LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY => "baz@1",
-                                              "a" => "b", "c" => "d"))
+    for arg in [Baz, Baz(), Schema(Baz), Schema{:baz,1}]
+        Legolas.write(path, t, arg)
+        @test t == Baz.(Tables.rows(Legolas.read(path)))
+        tbl = Arrow.Table(Legolas.tobuffer(t, Schema("baz", 1); metadata=("a" => "b", "c" => "d")))
+        @test Set(Arrow.getmetadata(tbl)) == Set((Legolas.LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY => "baz@1",
+                                                  "a" => "b", "c" => "d"))
+    end
 
     struct Foo
         meta
@@ -123,6 +125,9 @@ end
     @test Legolas.schema_parent(Schema("bar", 1)) == Schema("foo", 1)
 
     r = Row(Schema("bar", 1), (x=1, y=2, z=3))
+
+    @test Schema(r) == Schema("bar", 1)
+    @test Schema(typeof(r)) == Schema("bar", 1)
 
     @test propertynames(r) == (:z, :x, :y)
     @test r === Row(Schema("bar", 1), r)

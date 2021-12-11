@@ -91,10 +91,13 @@ function read(io_or_path; validate::Bool=true)
 end
 
 """
-    Legolas.write(io_or_path, table, schema::Schema; validate::Bool=true, kwargs...)
+    Legolas.write(io_or_path, table, row_or_schema; validate::Bool=true, kwargs...)
 
 Write `table` to `io_or_path`, inserting the appropriate `$LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY`
 field in the written out Arrow metadata.
+
+`row_or_schema` can be a [`Legolas.Row`](@ref) object or type, or a [`Legolas.Schema`](@ref)
+object or type.
 
 If `validate` is `true`, `Legolas.validate` will be called on the table before it written out.
 
@@ -102,8 +105,9 @@ Any other provided `kwargs` are forwarded to an internal invocation of `Arrow.wr
 
 Note that `io_or_path` may be any type that supports `Base.write(io_or_path, bytes::Vector{UInt8})`.
 """
-function write(io_or_path, table, schema::Schema; validate::Bool=true,
+function write(io_or_path, table, row_or_schema; validate::Bool=true,
                metadata=Arrow.getmetadata(table), kwargs...)
+    schema = Schema(row_or_schema)
     validate && Legolas.validate(table, schema)
     schema_metadata = LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY => schema_qualified_string(schema)
     if isnothing(metadata)
