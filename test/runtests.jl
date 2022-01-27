@@ -140,6 +140,9 @@ end
     @test_throws Legolas.UnknownSchemaError Legolas.transform(Legolas.Schema("imadethisup@3"); a = 1, b = 2)
     @test_throws Legolas.UnknownSchemaError Legolas.validate(Tables.Schema((:a, :b), (Int, Int)), Legolas.Schema("imadethisup@3"))
     @test_throws Legolas.UnknownSchemaError Legolas.schema_qualified_string(Legolas.Schema("imadethisup@3"))
+
+    sch = Schema("bar", 1)
+    @test Schema(sch) == sch
 end
 
 @testset "isequal, hash" begin
