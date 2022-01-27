@@ -26,6 +26,8 @@ See also: [`schema_name`](@ref), [`schema_version`](@ref), [`schema_parent`](@re
 """
 struct Schema{name,version} end
 
+Schema(schema::Schema) = schema
+
 """
     Legolas.Schema(name::AbstractString, version::Integer)
 
