@@ -29,7 +29,7 @@ struct Schema{name,version} end
 Schema(schema::Schema) = schema
 
 # support (de)serialization of Schemas to Arrow
-const LEGOLAS_SCHEMA_ARROW_NAME = Symbol("JuliaLang.Legolas.Row")
+const LEGOLAS_SCHEMA_ARROW_NAME = Symbol("JuliaLang.Legolas.Schema")
 Arrow.ArrowTypes.arrowname(::Type{<:Schema}) = LEGOLAS_SCHEMA_ARROW_NAME
 Arrow.ArrowTypes.ArrowType(::Type{<:Schema}) = String
 Arrow.ArrowTypes.toarrow(schema::Schema) = schema_qualified_string(schema)
