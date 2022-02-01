@@ -143,6 +143,10 @@ end
 
     sch = Schema("bar", 1)
     @test Schema(sch) == sch
+
+    schemas = [Schema("bar", 1), Schema("foo", 1)]
+    tbl = Arrow.Table(Arrow.tobuffer((; schema=schemas)))
+    @test all(tbl.schema .== schemas)
 end
 
 @testset "isequal, hash" begin
