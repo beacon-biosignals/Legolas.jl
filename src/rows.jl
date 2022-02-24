@@ -176,7 +176,7 @@ end
     schema_qualified_string(::Legolas.Schema{name,version})
 
 Return this `Legolas.Schema`'s fully qualified schema identifier string. This string is
-serialized as the `\"$LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY\"`` field value in table
+serialized as the `\"$LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY\"` field value in table
 metadata for table written via [`Legolas.write`](@ref).
 """
 schema_qualified_string(s::Legolas.Schema) = throw(UnknownSchemaError(s))
