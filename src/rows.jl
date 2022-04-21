@@ -119,7 +119,7 @@ function Base.showerror(io::IO, e::UnknownSchemaError)
               your environment is as expected).
 
               Note that if you're in this particular situation, you can still load
-              the raw table as-is. For example, to load an Arrow table, call `Arrow.Table(path)`.
+              the raw table as-is without Legolas; e.g., to load an Arrow table, call `Arrow.Table(path)`.
               """)
     return nothing
 end
