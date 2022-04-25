@@ -161,3 +161,14 @@ end
     @test !isequal(foo, foo3)
     @test hash(foo) != hash(foo3)
 end
+
+const MyInnerRow = @row("my-inner-schema@1", b::Int=1)
+const MyOuterRow = @row("my-outer-schema@1",
+                        a::String,
+                        x::MyInnerRow=MyInnerRow(x))
+
+@testset "Nested arrow serialization" begin
+    table = [MyOuterRow(; a="outer_a", x = MyInnerRow())]
+    roundtripped_table = Legolas.read(Legolas.tobuffer(table, Legolas.Schema("my-outer-schema@1")))
+    @test table == MyOuterRow.(Tables.rows(roundtripped_table))
+end
