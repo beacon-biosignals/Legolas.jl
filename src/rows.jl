@@ -288,6 +288,8 @@ macro row(schema_expr, fields...)
         parent_transform = :(fields = transform($quoted_parent; fields...))
         parent_validate = :(validate(tables_schema, $quoted_parent))
     end
+
+    legolas_row_arrow_name = :(Symbol("JuliaLang.", $schema_qualified_string))
     return quote
         Legolas.schema_qualified_string(::$schema_type) = $schema_qualified_string
 
@@ -313,19 +315,33 @@ macro row(schema_expr, fields...)
             return _validate(tables_schema, legolas_schema)
         end
 
+
+        # Support (de)serialization as an Arrow column value via Arrow.ArrowTypes overloads.
+        #
+        # Note that this only really works in relatively simple cases; rely on this at your own peril.
+        # See https://github.com/JuliaData/Arrow.jl/issues/230 for more details.
+        #
+        # Note also that the limited support here that DOES work participates in SemVer,
+        # e.g. if we break this in future Legolas versions we should treat it as a breaking
+        # change and bump version numbers accordingly.
+
+        # We serialize as a triple of schema name, schema version, and fields.
+        # This is for backwards compatibility. With this approach, defining methods per-Row type,
+        # we could just serialize the fields alone.
+        # This approach allows nested arrow serialization to work, ref <https://github.com/beacon-biosignals/Legolas.jl/issues/39>.
+        Arrow.ArrowTypes.arrowname(::Type{<:Legolas.Row{$schema_type}}) = $legolas_row_arrow_name
+        Arrow.ArrowTypes.ArrowType(::Type{Legolas.Row{$schema_type,F}}) where {F} = Tuple{String,Int,F}
+        Arrow.ArrowTypes.toarrow(row::Legolas.Row{$schema_type}) = (String(Legolas.schema_name($schema_type)), Legolas.schema_version($schema_type), getfield(row, :fields))
+        Arrow.ArrowTypes.JuliaType(::Val{$legolas_row_arrow_name}, ::Any) = Legolas.Row{$schema_type}
+        Arrow.ArrowTypes.fromarrow(::Type{<:Legolas.Row{$schema_type}}, name, version, fields) = Legolas.Row{$schema_type}(fields)
+
+
         Legolas.Row{$schema_type}
     end
 end
 
-# Support (de)serialization as an Arrow column value via Arrow.ArrowTypes overloads.
-#
-# Note that this only really works in relatively simple cases; rely on this at your own peril.
-# See https://github.com/JuliaData/Arrow.jl/issues/230 for more details.
-#
-# Note also that the limited support here that DOES work participates in SemVer,
-# e.g. if we break this in future Legolas versions we should treat it as a breaking
-# change and bump version numbers accordingly.
-
+# More Arrow serialization: here we provide backwards compatibility for `JuliaLang.Legolas.Row`
+# serialized tables.
 const LEGOLAS_ROW_ARROW_NAME = Symbol("JuliaLang.Legolas.Row")
 Arrow.ArrowTypes.arrowname(::Type{<:Legolas.Row}) = LEGOLAS_ROW_ARROW_NAME
 Arrow.ArrowTypes.ArrowType(::Type{Legolas.Row{_,F}}) where {_,F} = Tuple{String,Int,F}
