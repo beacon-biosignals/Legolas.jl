@@ -13,6 +13,7 @@ originally constructed.
 """
 lift(::Any, ::Union{Nothing,Missing}) = missing
 lift(f, x) = f(x)
+lift(::Type{T}, x::T) where T = x
 
 """
     lift(f)

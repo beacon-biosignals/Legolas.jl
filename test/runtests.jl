@@ -11,6 +11,18 @@ include(joinpath(dirname(@__DIR__), "examples", "tour.jl"))
     @test ismissing(Legolas.lift(sin)(nothing))
     @test ismissing(Legolas.lift(sin)(missing))
     @test Legolas.lift(sin)(1.0) == sin(1.0)
+
+    @testset "missing identity constructor" begin
+        mutable struct PR45
+            x::Int
+        end
+        Foo = PR45  # Alias to unique struct name
+
+        x = Foo(1)
+        @test x !== Foo(1)
+        @test_throws MethodError Foo(x)  # Type does not define an identity constructor
+        @test Legolas.lift(Foo, x) === x
+    end
 end
 
 @testset "Legolas.location" begin
