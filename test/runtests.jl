@@ -32,6 +32,7 @@ end
 
     # Restrict `lift_type` to types only
     @test_throws MethodError Legolas.lift_type(sin, missing)
+    @test_throws MethodError Legolas.lift_type(sin)
 
     @testset "undefined identity constructor" begin
         mutable struct PR45
