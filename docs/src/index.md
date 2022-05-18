@@ -32,6 +32,7 @@ Legolas.read
 
 ```@docs
 Legolas.lift
+Legolas.lift_type
 Legolas.assign_to_table_metadata!
 Legolas.gather
 Legolas.locations

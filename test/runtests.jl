@@ -8,11 +8,32 @@ include(joinpath(dirname(@__DIR__), "examples", "tour.jl"))
     @test ismissing(Legolas.lift(sin, nothing))
     @test ismissing(Legolas.lift(sin, missing))
     @test Legolas.lift(sin, 1.0) == sin(1.0)
+    @test Legolas.lift(Some, Some(1)) == Some(Some(1))
+
     @test ismissing(Legolas.lift(sin)(nothing))
     @test ismissing(Legolas.lift(sin)(missing))
     @test Legolas.lift(sin)(1.0) == sin(1.0)
+    @test Legolas.lift(Some)(Some(1)) == Some(Some(1))
+end
 
-    @testset "missing identity constructor" begin
+@testset "Legolas.lift_type" begin
+    @test Legolas.lift_type(Int, 0x00) === 0
+    @test Legolas.lift_type(Int, missing) === missing
+    @test Legolas.lift_type(Int, nothing) === missing
+    @test Legolas.lift_type(Some, Some(1)) === Some(1)
+
+    @test Legolas.lift_type(Int)(0x00) === 0
+    @test Legolas.lift_type(Int)(missing) === missing
+    @test Legolas.lift_type(Int)(nothing) === missing
+    @test Legolas.lift_type(Some)(Some(1)) === Some(1)
+
+    # Possible ambigious method call
+    @test Legolas.lift_type(Nothing, nothing) === missing
+
+    # Restrict `lift_type` to types only
+    @test_throws MethodError Legolas.lift_type(sin, missing)
+
+    @testset "undefined identity constructor" begin
         mutable struct PR45
             x::Int
         end
@@ -21,7 +42,7 @@ include(joinpath(dirname(@__DIR__), "examples", "tour.jl"))
         x = Foo(1)
         @test x !== Foo(1)
         @test_throws MethodError Foo(x)  # Type does not define an identity constructor
-        @test Legolas.lift(Foo, x) === x
+        @test Legolas.lift_type(Foo, x) === x
     end
 end
 
