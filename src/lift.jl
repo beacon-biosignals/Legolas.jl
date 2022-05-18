@@ -9,8 +9,8 @@ originally constructed.
 
 See also: [`lift_type`](@ref)
 """
-lift(::Any, ::Union{Nothing,Missing}) = missing
 lift(f, x) = f(x)
+lift(::Any, ::Union{Nothing,Missing}) = missing
 
 """
     lift(f)
