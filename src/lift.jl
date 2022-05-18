@@ -21,19 +21,23 @@ lift(f) = Base.Fix1(lift, f)
 
 
 """
-    lift_type(T::Type, x)
+    construct(T::Type, x)
 
-Construct `T(x)` unless `x` is of type `T` or `Missing` then `x` itself will be returned.
-If `x` is of type `Nothing` then the value `missing` will be returned instead.
+Construct `T(x)` unless `x` is of type `T`, in which case return `x` itself. Useful in
+conjunction with the [`lift`](@ref) function for types which don't have a constructor which
+accepts instances of itself (e.g. `T(::T)`).
 
-This is particularly useful when handling values from `Arrow.Table`, whose null values
-may present as either `missing` or `nothing` depending on how the table itself was
-originally constructed.
+## Examples
+```jldoctest
+julia> using Legolas: lift, construct
 
-See also: [`lift`](@ref)
+julia> lift(Some, Some(1))
+Some(Some(1))
+
+julia> lift(construct(Some), Some(1))
+Some(1)
+```
 """
-lift_type(T::Type, x) = T(x)
-lift_type(::Type{T}, x::T) where T = x
-lift_type(::Type, ::Union{Nothing,Missing}) = missing
-
-lift_type(T::Type) = Base.Fix1(lift_type, T)
+construct(T::Type, x) = T(x)
+construct(::Type{T}, x::T) where T = x
+construct(T::Type) = Base.Fix1(construct, T)
