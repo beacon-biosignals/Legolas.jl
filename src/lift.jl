@@ -55,5 +55,5 @@ Some(1)
 ```
 """
 construct(T::Type, x) = T(x)
-construct(::Type{T}, x::T) where T = x
+construct(::Type{T}, x::T) where {T} = x
 construct(T::Type) = Base.Fix1(construct, T)
