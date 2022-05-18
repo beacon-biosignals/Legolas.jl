@@ -28,6 +28,22 @@ conjunction with the [`lift`](@ref) function for types which don't have a constr
 accepts instances of itself (e.g. `T(::T)`).
 
 ## Examples
+
+```jldoctest
+julia> using Legolas: construct
+
+julia> construct(Float64, 1)
+1.0
+
+julia> Some(Some(1))
+Some(Some(1))
+
+julia> construct(Some, Some(1))
+Some(1)
+```
+
+Use the curried form when using `lift`:
+
 ```jldoctest
 julia> using Legolas: lift, construct
 
