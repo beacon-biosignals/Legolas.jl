@@ -7,7 +7,7 @@ This is particularly useful when handling values from `Arrow.Table`, whose null 
 may present as either `missing` or `nothing` depending on how the table itself was
 originally constructed.
 
-See also: [`lift_type`](@ref)
+See also: [`construct`](@ref)
 """
 lift(f, x) = f(x)
 lift(::Any, ::Union{Nothing,Missing}) = missing
