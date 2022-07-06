@@ -150,7 +150,7 @@ function _transform end
 """
     Legolas.validate(tables_schema::Tables.Schema, legolas_schema::Legolas.Schema)
 
-Throws an `ArgumentError` if `tables_schema` does comply with `legolas_schema`, otherwise
+Throws an `ArgumentError` if `tables_schema` does not comply with `legolas_schema`, otherwise
 returns `nothing`.
 
 Specifically, `tables_schema` is considered to comply with `legolas_schema` if:
