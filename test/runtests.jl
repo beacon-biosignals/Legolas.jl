@@ -231,7 +231,7 @@ end
 const MyInnerRow = @row("my-inner-schema@1", b::Int=1)
 const MyOuterRow = @row("my-outer-schema@1",
                         a::String,
-                        x::MyInnerRow = MyInnerRow(x))
+                        x::MyInnerRow=MyInnerRow(x))
 
 @testset "Nested arrow serialization" begin
     table = [MyOuterRow(; a="outer_a", x=MyInnerRow())]
