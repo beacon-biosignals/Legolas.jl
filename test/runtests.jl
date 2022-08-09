@@ -187,10 +187,12 @@ end
     @test Legolas.schema_field_names(Schema{:parent,1}) == parent_fields
     @test Legolas.schema_field_names(Schema("parent@1")) == parent_fields
     @test Legolas.schema_field_names(Parent()) == parent_fields
+    @test Legolas.schema_field_names(Parent) == parent_fields
 
     @test Legolas.schema_field_types(Schema{:parent,1}) == parent_field_types
     @test Legolas.schema_field_types(Schema("parent@1")) == parent_field_types
     @test Legolas.schema_field_types(Parent()) == parent_field_types
+    @test Legolas.schema_field_types(Parent) == parent_field_types
 
     Child = @row("child@1" > "parent@1",
                   first_child_field::Symbol=:first,
@@ -202,10 +204,12 @@ end
     @test Legolas.schema_field_names(Schema{:child,1}) == child_fields
     @test Legolas.schema_field_names(Schema("child@1")) == child_fields
     @test Legolas.schema_field_names(Child()) == child_fields
+    @test Legolas.schema_field_names(Child) == child_fields
 
     @test Legolas.schema_field_types(Schema{:child,1}) == child_field_types
     @test Legolas.schema_field_types(Schema("child@1")) == child_field_types
     @test Legolas.schema_field_types(Child()) == child_field_types
+    @test Legolas.schema_field_types(Child) == child_field_types
 
     @test_throws Legolas.UnknownSchemaError Legolas.schema_field_names(Legolas.Schema("imadethisup@3"))
     @test_throws Legolas.UnknownSchemaError Legolas.schema_field_types(Legolas.Schema("imadethisup@3"))
