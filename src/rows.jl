@@ -105,22 +105,25 @@ struct UnknownSchemaError <: Exception
 end
 
 function Base.showerror(io::IO, e::UnknownSchemaError)
-    print(io, """
-              encountered unknown `Legolas.Schema` type: $(e.schema)
+    print(
+        io,
+        """
+        encountered unknown `Legolas.Schema` type: $(e.schema)
 
-              This generally indicates that this schema has not been defined (i.e.
-              the schema's corresponding `@row` statement has not been executed) in
-              the current Julia session.
+        This generally indicates that this schema has not been defined (i.e.
+        the schema's corresponding `@row` statement has not been executed) in
+        the current Julia session.
 
-              In practice, this can arise if you try to read a Legolas table with a
-              prescribed schema, but haven't actually loaded the schema definition
-              (or commonly, haven't loaded the dependency that contains the schema
-              definition - check the versions of loaded packages/modules to confirm
-              your environment is as expected).
+        In practice, this can arise if you try to read a Legolas table with a
+        prescribed schema, but haven't actually loaded the schema definition
+        (or commonly, haven't loaded the dependency that contains the schema
+        definition - check the versions of loaded packages/modules to confirm
+        your environment is as expected).
 
-              Note that if you're in this particular situation, you can still load
-              the raw table as-is without Legolas; e.g., to load an Arrow table, call `Arrow.Table(path)`.
-              """)
+        Note that if you're in this particular situation, you can still load
+        the raw table as-is without Legolas; e.g., to load an Arrow table, call `Arrow.Table(path)`.
+        """
+    )
     return nothing
 end
 
@@ -227,6 +230,26 @@ function Base.show(io::IO, row::Row)
     return nothing
 end
 
+"""
+    schema_field_names(::Type{<:Legolas.Schema})
+
+Get a tuple with the names of the fields of this `Legolas.Schema`, including names that
+have been inherited from this `Legolas.Schema`'s parent schema.
+"""
+schema_field_names(::Type{S}) where {S<:Legolas.Schema} = throw(UnknownSchemaError(S()))
+schema_field_names(s::Legolas.Schema) = schema_field_names(typeof(s))
+schema_field_names(::Legolas.Row{S}) where {S} = schema_field_names(S)
+
+"""
+    schema_field_types(::Legolas.Schema{name,version})
+
+Get a tuple with the types of the fields of this `Legolas.Schema`, including types of fields that
+have been inherited from this `Legolas.Schema`'s parent schema.
+"""
+schema_field_types(::Type{S}) where {S<:Legolas.Schema} = throw(UnknownSchemaError(S()))
+schema_field_types(s::Legolas.Schema) = schema_field_types(typeof(s))
+schema_field_types(::Legolas.Row{S}) where {S} = schema_field_types(S)
+
 function _parse_schema_expr(x)
     if x isa Expr && x.head == :call && x.args[1] == :> && length(x.args) == 3
         child, _ = _parse_schema_expr(x.args[2])
@@ -277,14 +300,21 @@ macro row(schema_expr, fields...)
         name, type = f.args[1].args
         return :(validate_expected_field(tables_schema, $(Base.Meta.quot(name)), $(esc(type))))
     end
-    field_names = [esc(f.args[1].args[1]) for f in fields]
+    field_exprs = [f.args[1] for f in fields]
+    field_names = [e.args[1] for e in field_exprs]
+    field_types = [e.args[2] for e in field_exprs]
+    escaped_field_names = map(esc, field_names)
     schema_type = Base.Meta.quot(typeof(schema))
     quoted_parent = Base.Meta.quot(parent)
     schema_qualified_string = string(schema_name(schema), '@', schema_version(schema))
+    schema_field_names = Expr(:tuple, map(QuoteNode, field_names)...)
+    schema_field_types = Expr(:tuple, field_types...)
     parent_transform = nothing
     parent_validate = nothing
     if !isnothing(parent)
         schema_qualified_string = :(string($schema_qualified_string, '>', Legolas.schema_qualified_string($quoted_parent)))
+        schema_field_names = :(($schema_field_names..., Legolas.schema_field_names($quoted_parent)...))
+        schema_field_types = :(($schema_field_types..., Legolas.schema_field_types($quoted_parent)...))
         parent_transform = :(fields = transform($quoted_parent; fields...))
         parent_validate = :(validate(tables_schema, $quoted_parent))
     end
@@ -292,12 +322,14 @@ macro row(schema_expr, fields...)
     legolas_row_arrow_name = :(Symbol("JuliaLang.", $schema_qualified_string))
     return quote
         Legolas.schema_qualified_string(::$schema_type) = $schema_qualified_string
+        Legolas.schema_field_names(::Type{$schema_type}) = $schema_field_names
+        Legolas.schema_field_types(::Type{$schema_type}) = $schema_field_types
 
         Legolas.schema_parent(::Type{<:$schema_type}) = $quoted_parent
 
-        function Legolas._transform(::$schema_type; $([Expr(:kw, f, :missing) for f in field_names]...), other...)
+        function Legolas._transform(::$schema_type; $([Expr(:kw, f, :missing) for f in escaped_field_names]...), other...)
             $(map(esc, fields)...)
-            return (; $([Expr(:kw, f, f) for f in field_names]...), other...)
+            return (; $([Expr(:kw, f, f) for f in escaped_field_names]...), other...)
         end
 
         function Legolas._validate(tables_schema::Tables.Schema, legolas_schema::$schema_type)
