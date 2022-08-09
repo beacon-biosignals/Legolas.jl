@@ -233,10 +233,10 @@ end
 Get a tuple with the names of the fields of this `Legolas.Schema`, including names that
 have been inherited from this `Legolas.Schema`'s parent schema.
 """
-schema_field_names(::Type{S}) where {S<:Legolas.Schema} = throw(UnknownSchemaError(S()))
-schema_field_names(s::Legolas.Schema) = schema_field_names(typeof(s))
-schema_field_names(::Legolas.Row{S}) where {S} = schema_field_names(S)
-schema_field_names(::Type{<:Legolas.Row{S}}) where {S} = schema_field_names(S)
+schema_field_names(::Type{S}) where {S<:Schema} = throw(UnknownSchemaError(S()))
+schema_field_names(s::Schema) = schema_field_names(typeof(s))
+schema_field_names(::Row{S}) where {S} = schema_field_names(S)
+schema_field_names(::Type{<:Row{S}}) where {S} = schema_field_names(S)
 
 """
     schema_field_types(::Legolas.Schema{name,version})
@@ -244,10 +244,10 @@ schema_field_names(::Type{<:Legolas.Row{S}}) where {S} = schema_field_names(S)
 Get a tuple with the types of the fields of this `Legolas.Schema`, including types of fields that
 have been inherited from this `Legolas.Schema`'s parent schema.
 """
-schema_field_types(::Type{S}) where {S<:Legolas.Schema} = throw(UnknownSchemaError(S()))
-schema_field_types(s::Legolas.Schema) = schema_field_types(typeof(s))
-schema_field_types(::Legolas.Row{S}) where {S} = schema_field_types(S)
-schema_field_types(::Type{<:Legolas.Row{S}}) where {S} = schema_field_types(S)
+schema_field_types(::Type{S}) where {S<:Schema} = throw(UnknownSchemaError(S()))
+schema_field_types(s::Schema) = schema_field_types(typeof(s))
+schema_field_types(::Row{S}) where {S} = schema_field_types(S)
+schema_field_types(::Type{<:Row{S}}) where {S} = schema_field_types(S)
 
 function _parse_schema_expr(x)
     if x isa Expr && x.head == :call && x.args[1] == :> && length(x.args) == 3

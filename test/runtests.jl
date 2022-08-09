@@ -195,8 +195,8 @@ end
     @test Legolas.schema_field_types(Parent) == parent_field_types
 
     Child = @row("child@1" > "parent@1",
-                  first_child_field::Symbol=:first,
-                  second_child_field="I can be anything")
+                 first_child_field::Symbol=:first,
+                 second_child_field="I can be anything")
 
     child_fields = (:first_child_field, :second_child_field, parent_fields...)
     child_field_types = (Symbol, Any, parent_field_types...)
