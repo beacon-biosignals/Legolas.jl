@@ -105,25 +105,22 @@ struct UnknownSchemaError <: Exception
 end
 
 function Base.showerror(io::IO, e::UnknownSchemaError)
-    print(
-        io,
-        """
-        encountered unknown `Legolas.Schema` type: $(e.schema)
+    print(io, """
+              encountered unknown `Legolas.Schema` type: $(e.schema)
 
-        This generally indicates that this schema has not been defined (i.e.
-        the schema's corresponding `@row` statement has not been executed) in
-        the current Julia session.
+              This generally indicates that this schema has not been defined (i.e.
+              the schema's corresponding `@row` statement has not been executed) in
+              the current Julia session.
 
-        In practice, this can arise if you try to read a Legolas table with a
-        prescribed schema, but haven't actually loaded the schema definition
-        (or commonly, haven't loaded the dependency that contains the schema
-        definition - check the versions of loaded packages/modules to confirm
-        your environment is as expected).
+              In practice, this can arise if you try to read a Legolas table with a
+              prescribed schema, but haven't actually loaded the schema definition
+              (or commonly, haven't loaded the dependency that contains the schema
+              definition - check the versions of loaded packages/modules to confirm
+              your environment is as expected).
 
-        Note that if you're in this particular situation, you can still load
-        the raw table as-is without Legolas; e.g., to load an Arrow table, call `Arrow.Table(path)`.
-        """
-    )
+              Note that if you're in this particular situation, you can still load
+              the raw table as-is without Legolas; e.g., to load an Arrow table, call `Arrow.Table(path)`.
+              """)
     return nothing
 end
 
