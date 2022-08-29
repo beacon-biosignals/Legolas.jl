@@ -211,8 +211,8 @@ end
     @test Legolas.schema_field_types(Child()) == child_field_types
     @test Legolas.schema_field_types(Child) == child_field_types
 
-    @test_throws Legolas.UnknownSchemaError Legolas.schema_field_names(Legolas.Schema("imadethisup@3"))
-    @test_throws Legolas.UnknownSchemaError Legolas.schema_field_types(Legolas.Schema("imadethisup@3"))
+    @test_throws MethodError Legolas.schema_field_names(Legolas.Schema("imadethisup@3"))
+    @test_throws MethodError Legolas.schema_field_types(Legolas.Schema("imadethisup@3"))
 end
 
 @testset "isequal, hash" begin
