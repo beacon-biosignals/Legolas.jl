@@ -105,22 +105,25 @@ struct UnknownSchemaError <: Exception
 end
 
 function Base.showerror(io::IO, e::UnknownSchemaError)
-    print(io, """
-              encountered unknown `Legolas.Schema` type: $(e.schema)
+    print(
+        io,
+        """
+        encountered unknown `Legolas.Schema` type: $(e.schema)
 
-              This generally indicates that this schema has not been defined (i.e.
-              the schema's corresponding `@row` statement has not been executed) in
-              the current Julia session.
+        This generally indicates that this schema has not been defined (i.e.
+        the schema's corresponding `@row` statement has not been executed) in
+        the current Julia session.
 
-              In practice, this can arise if you try to read a Legolas table with a
-              prescribed schema, but haven't actually loaded the schema definition
-              (or commonly, haven't loaded the dependency that contains the schema
-              definition - check the versions of loaded packages/modules to confirm
-              your environment is as expected).
+        In practice, this can arise if you try to read a Legolas table with a
+        prescribed schema, but haven't actually loaded the schema definition
+        (or commonly, haven't loaded the dependency that contains the schema
+        definition - check the versions of loaded packages/modules to confirm
+        your environment is as expected).
 
-              Note that if you're in this particular situation, you can still load
-              the raw table as-is without Legolas; e.g., to load an Arrow table, call `Arrow.Table(path)`.
-              """)
+        Note that if you're in this particular situation, you can still load
+        the raw table as-is without Legolas; e.g., to load an Arrow table, call `Arrow.Table(path)`.
+        """
+    )
     return nothing
 end
 
@@ -233,9 +236,9 @@ end
 Get a tuple with the names of the fields of this `Legolas.Schema`, including names that
 have been inherited from this `Legolas.Schema`'s parent schema.
 """
-schema_field_names(s::Legolas.Schema) = schema_field_names(typeof(s))
-schema_field_names(::Legolas.Row{S}) where {S} = schema_field_names(S)
-schema_field_names(::Type{<:Legolas.Row{S}}) where {S} = schema_field_names(S)
+schema_field_names(s::Schema) = schema_field_names(typeof(s))
+schema_field_names(::Row{S}) where {S} = schema_field_names(S)
+schema_field_names(::Type{<:Row{S}}) where {S} = schema_field_names(S)
 
 """
     schema_field_types(::Legolas.Schema{name,version})
@@ -243,9 +246,9 @@ schema_field_names(::Type{<:Legolas.Row{S}}) where {S} = schema_field_names(S)
 Get a tuple with the types of the fields of this `Legolas.Schema`, including types of fields that
 have been inherited from this `Legolas.Schema`'s parent schema.
 """
-schema_field_types(s::Legolas.Schema) = schema_field_types(typeof(s))
-schema_field_types(::Legolas.Row{S}) where {S} = schema_field_types(S)
-schema_field_types(::Type{<:Legolas.Row{S}}) where {S} = schema_field_types(S)
+schema_field_types(s::Schema) = schema_field_types(typeof(s))
+schema_field_types(::Row{S}) where {S} = schema_field_types(S)
+schema_field_types(::Type{<:Row{S}}) where {S} = schema_field_types(S)
 
 function _parse_schema_expr(x)
     if x isa Expr && x.head == :call && x.args[1] == :> && length(x.args) == 3
