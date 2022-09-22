@@ -1,6 +1,6 @@
 using Legolas, Test, DataFrames, Arrow
 
-using Legolas: Schema, @row, Row
+using Legolas: Schema, @schema, apply
 
 include(joinpath(dirname(@__DIR__), "examples", "tour.jl"))
 
@@ -140,31 +140,29 @@ end
     @test_throws Legolas.UnknownSchemaError Legolas.read(t)
 end
 
-@testset "miscellaneous Legolas.Schema / Legolas.Row tests" begin
+@testset "miscellaneous Legolas.Schema tests" begin
     @test_throws ArgumentError("`Legolas.Schema` version must be non-negative, recieved: -1") Schema("good_name", -1)
     @test_throws ArgumentError("argument is not a valid `Legolas.Schema` name: \"bad_name?\"") Schema("bad_name?", 1)
     @test_throws ArgumentError("argument is not a valid `Legolas.Schema` string: \"bad_name>?@1\"") Schema("bad_name>?@1")
 
-    @row("foo@1", x, y)
-    @row("bar@1" > "foo@1", z)
+    @schema("foo@1", x, y)
+    @schema("bar@1" > "foo@1", z)
     @test Legolas.schema_parent(Schema("bar", 1)) == Schema("foo", 1)
 
-    r = Row(Schema("bar", 1), (x=1, y=2, z=3))
+    r = apply(Schema("bar", 1), (x=1, y=2, z=3))
 
     @test propertynames(r) == (:z, :x, :y)
-    @test r === Row(Schema("bar", 1), r)
-    @test r === Row(Schema("bar", 1); x=1, y=2, z=3)
-    @test r === Row(Schema("bar", 1), first(Tables.rows(Arrow.Table(Arrow.tobuffer((x=[1],y=[2],z=[3]))))))
-    @test r[1] === 3
-    @test string(r) == "Row(Schema(\"bar@1\"), (z = 3, x = 1, y = 2))"
+    @test r === apply(Schema("bar", 1), r)
+    @test r === apply(Schema("bar", 1); x=1, y=2, z=3)
+    @test r === apply(Schema("bar", 1), first(Tables.rows(Arrow.Table(Arrow.tobuffer((x=[1],y=[2],z=[3]))))))
 
     tbl = Arrow.Table(Arrow.tobuffer((x=[r],)))
     @test r === tbl.x[1]
 
-    long_row = Row(Schema("bar", 1), (x=1, y=2, z=zeros(100, 100)))
+    long_row = apply(Schema("bar", 1), (x=1, y=2, z=zeros(100, 100)))
     @test length(sprint(show, long_row; context=(:limit => true))) < 200
 
-    @test_throws Legolas.UnknownSchemaError Legolas.transform(Legolas.Schema("imadethisup@3"); a = 1, b = 2)
+    @test_throws Legolas.UnknownSchemaError Legolas.apply(Legolas.Schema("imadethisup@3"); a = 1, b = 2)
     @test_throws Legolas.UnknownSchemaError Legolas.validate(Tables.Schema((:a, :b), (Int, Int)), Legolas.Schema("imadethisup@3"))
     @test_throws Legolas.UnknownSchemaError Legolas.schema_qualified_string(Legolas.Schema("imadethisup@3"))
 
@@ -189,10 +187,10 @@ end
     @test hash(foo) != hash(foo3)
 end
 
-const MyInnerRow = @row("my-inner-schema@1", b::Int=1)
-const MyOuterRow = @row("my-outer-schema@1",
-                        a::String,
-                        x::MyInnerRow=MyInnerRow(x))
+@schema("my-inner-schema@1", b::Int=1)
+@schema("my-outer-schema@1",
+        a::String,
+        x::MyInnerRow=MyInnerRow(x))
 
 @testset "Nested arrow serialization" begin
     table = [MyOuterRow(; a="outer_a", x = MyInnerRow())]
