@@ -8,4 +8,10 @@ include("lift.jl")
 include("schemas.jl")
 include("tables.jl")
 
+# TODO: deprecations for:
+#
+# - `Legolas.Row`` + `Legolas.@row`
+# - relevant methods against `Type{<:Schema}` instead of `Schema`
+#
+
 end # module
