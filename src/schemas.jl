@@ -154,10 +154,11 @@ schema_fields(schema::Schema) = throw(UnknownSchemaError(schema))
 """
 TODO
 
-- returns a `Dict{Symbol,Expr}` containing each required field statement for interactive discovery usage (including parent fields)
-- only one entry per field; merge "subsequent" field declarations / constraints
+- returns a `Pair{String,Dict{Symbol,Expr}}` containing each required field statement for interactive discovery usage (NOT including parent fields)
+- does NOT include parent fields
+- should NOT be used for anything other than interactive discovery
 """
-schema_field_statements(schema::Schema) = throw(UnknownSchemaError(schema))
+schema_declaration(schema::Schema) = throw(UnknownSchemaError(schema))
 
 #####
 ##### `Schema` printing
@@ -240,7 +241,7 @@ complies_with_expected_field(schema, name, T) = isnothing(_check_expected_field(
 #####
 # TODO more heavily encourage idempotency in documentation/examples
 
-row(s::Legolas.Schema; fields...) = throw(UnknownSchemaError(s))
+row(schema::Schema; fields...) = throw(UnknownSchemaError(schema))
 row(schema::Schema, fields::NamedTuple) = row(schema; fields...)
 row(schema::Schema, fields) = row(schema, NamedTuple(Tables.Row(fields)))
 
@@ -267,21 +268,16 @@ end
 
 _parse_schema_expr(str::AbstractString) = Schema(str), nothing
 
-# xref https://github.com/JuliaLang/julia/pull/36291#issuecomment-1229396243
-function _merge_named_tuple_with_typeintersect(a::NamedTuple, b::NamedTuple)
-    names = Base.merge_names(keys(a), keys(b))
-    return NamedTuple{names}(ntuple(nfields(names)) do i
-        n = getfield(names, i)
-        if haskey(a, n)
-            haskey(b, n) && return typeintersect(getfield(a, n), getfield(b, n))
-            return getfield(a, n)
-        else
-            return getfield(b, n)
-        end
-    end)
+function _normalize_field(f)
+    original_f = f
+    f isa Symbol && (f = Expr(:(::), f, :Any))
+    f.head == :(::) && (f = Expr(:(=), f, f.args[1]))
+    f.head == :(=) && f.args[1] isa Symbol && (f.args[1] = Expr(:(::), f.args[1], :Any))
+    f.head == :(=) && f.args[1].head == :(::) || throw(SchemaDeclarationError("malformed `@schema` field expression: $original_f"))
+    return f
 end
 
-function _do_child_fields_subtype_parent_fields(child_fields::NamedTuple, parent_fields::NamedTuple)
+function _has_valid_child_field_types(child_fields::NamedTuple, parent_fields::NamedTuple)
     for (name, child_type) in pairs(child_fields)
         if haskey(parent_fields, name)
             child_type <: parent_fields[name] || return false
@@ -290,49 +286,16 @@ function _do_child_fields_subtype_parent_fields(child_fields::NamedTuple, parent
     return true
 end
 
-macro schema(schema_expr, field_exprs...)
-    schema, parent = _parse_schema_expr(schema_expr)
-    isnothing(schema) && throw(SchemaDeclarationError("`@schema` schema argument must be of the form `\"name@X\"` or `\"name@X\" > \"parent@Y\"`. Received: $schema_expr"))
-    field_statements = map(field_exprs) do f
-        original_f = f
-        f isa Symbol && (f = Expr(:(::), f, :Any))
-        f.head == :(::) && (f = Expr(:(=), f, f.args[1]))
-        f.head == :(=) && f.args[1] isa Symbol && (f.args[1] = Expr(:(::), f.args[1], :Any))
-        f.head == :(=) && f.args[1].head == :(::) || throw(SchemaDeclarationError("malformed `@schema` field expression: $original_f"))
-        return f
-    end
-    fields = [f.args[1].args[1] => f.args[1].args[2] for f in field_statements]
-    allunique(n for (n, _) in fields) || throw(SchemaDeclarationError("TODO"))
-    fields_named_tuple = Expr(:tuple, (:($n = $t) for (n, t) in fields)...)
-    schema_qualified_string = string(schema_name(schema), '@', schema_version(schema))
-    quoted_schema = Base.Meta.quot(schema)
-    quoted_schema_type = Base.Meta.quot(typeof(schema))
-    quoted_parent = Base.Meta.quot(parent)
-    quoted_field_statements = Base.Meta.quot(field_statements)
-    check_parent_statements = isnothing(parent) ? nothing : quote
-        Legolas.schema_registered($quoted_parent) || throw(SchemaDeclarationError("TODO"))
-        Legolas._do_child_fields_subtype_parent_fields($fields_named_tuple, Legolas.schema_fields($quoted_parent)) || throw(SchemaDeclarationError("TODO"))
-    end
-    matches_existing_schema_definition = "TODO"
-    return quote
-        begin
-            if Legolas.schema_registered($quoted_schema)
-                $matches_existing_schema_definition || throw(SchemaDeclarationError("TODO"))
-            else
-                $check_parent_statements
-                eval(Legolas._generate_schema_overload_statements($quoted_schema, $quoted_parent, $quoted_field_statements))
-            end
-        end
-    end
+_validate_wrt_parent(child_fields::NamedTuple, parent::Nothing) = nothing
+
+function _validate_wrt_parent(child_fields::NamedTuple, parent::Schema)
+    schema_registered(parent) || throw(SchemaDeclarationError("parent not registered TODO"))
+    _has_valid_child_field_types(child_fields, schema_fields(parent)) || throw(SchemaDeclarationError("bad field types TODO"))
+    return nothing
 end
 
 # Note that there exists a clean generic approach for implementing `row` that is applicable
 # to the other Legolas functions that similarly compose child/parent schema behaviors:
-#
-#    function _row(schema; fields...)
-#        # perform only the transformations directly specified by the target
-         # schema declaration (i.e. do not include parent transformations)
-#    end
 #
 #    function row(schema::Schema; fields...)
 #        parent = schema_parent(schema)
@@ -340,38 +303,68 @@ end
 #        return _row(schema; fields...)
 #    end
 #
-# However, basic benchmarking demonstrates that the above approach can induce unnecessary
-# allocations for schemas with a few ancestors, while the "hardcoded" approach generated
-# below does not. Futhermore, this approach results in unintuitive field ordering compared
-# the hardcoded approach, ref https://github.com/beacon-biosignals/Legolas.jl/issues/12.
+# However, basic benchmarking as of Julia 1.6 demonstrates that the additional `parent isa Schema`
+# branch in the above approach can induce unnecessary allocations for schemas with a few ancestors,
+# while the approach below (which "hardcodes" the known result of this branch) does not.
+#
+# Note also that we cannot just interpolate the parent's declared field statements directly
+# into the child's `row` definition, since the parent's field statements may reference bindings
+# from the parent's declaration site that are not available/valid at the child's declaration
+# site.
 
-function _generate_schema_overload_statements(schema::Schema, parent::Schema,
-                                              field_statements::Vector{Expr})
+macro schema(schema_expr, field_exprs...)
+    schema, parent = _parse_schema_expr(schema_expr)
+    isnothing(schema) && throw(SchemaDeclarationError("`@schema`'s first argument must be of the form `\"name@X\"` or `\"name@X\" > \"parent@Y\"`. Received: $schema_expr"))
+
+    fields = [(name=stmt.args[1].args[1], type=stmt.args[1].args[2], statement=stmt)
+              for stmt in map(_normalize_field, field_exprs)]
+    allunique(f.name for f in fields) || throw(SchemaDeclarationError("duplicate field names in declarations TODO"))
+    field_names_types = Expr(:tuple, (:($(f.name) = $(f.type)) for f in fields)...)
+
+    quoted_schema = Base.Meta.quot(schema)
+    quoted_schema_type = Base.Meta.quot(typeof(schema))
+    quoted_parent = Base.Meta.quot(parent)
+
+    declared_string = "TODO"
     qualified_string = string(schema_name(schema), '@', schema_version(schema))
-    qualified_string = string(qualified_string, '>', schema_qualified_string(parent))
-    fields =
+    total_schema_fields = field_names_types
+    parent_row_invocation = nothing
+    if !isnothing(parent)
+        declared_string = "TODO"
+        qualified_string = :(string($qualified_string, '>', Legolas.schema_qualified_string($quoted_parent)))
+        total_schema_fields = :(merge(schema_fields(parent), $total_schema_fields))
+        parent_row_invocation = :(fields = Legolas.row($quoted_parent; fields...))
+    end
 
-
-    # TODO check if this works even if `Legolas` is not bound in evalutation context
+    quoted_schema_declaration = Base.Meta.quot(declared_string => Dict(f.name => f.statement for f in fields))
     return quote
-        $(Base.Meta.quot(Legolas)).schema_qualified_string(::$schema_type) = $qualified_string
+        if Legolas.schema_registered($quoted_schema) && Legolas.schema_declaration($quoted_schema) != $quoted_schema_declaration
+            throw(SchemaDeclarationError("invalid schema redefinition TODO"))
+        else
+            Legolas._validate_wrt_parent($field_names_types, $quoted_parent)
 
-        $(Base.Meta.quot(Legolas)).schema_parent(::$schema_type) = $(Base.Meta.quot(parent))
+            @inline Legolas.schema_registered(::$quoted_schema_type) = true
 
-        function Legolas.row(::$schema_type; $([Expr(:kw, f, :missing) for f in field_names]...), other...)
-            $(Legolas.)
-            $(field_statements...)
-            return (; $([Expr(:kw, f, f) for f in field_names]...), other...)
+            @inline Legolas.schema_qualified_string(::$quoted_schema_type) = $qualified_string
+
+            @inline Legolas.schema_parent(::$quoted_schema_type) = $quoted_parent
+
+            Legolas.schema_fields(::$quoted_schema_type) = $total_schema_fields
+
+            Legolas.schema_declaration(::$quoted_schema_type) = $quoted_schema_declaration
+
+            function Legolas._row(::$quoted_schema_type; $([Expr(:kw, esc(f.name), :missing) for f in fields]...), other...)
+                $((esc(f.statement) for f in fields)...)
+                return (; $([Expr(:kw, esc(f.name), esc(f.name)) for f in fields]...), other...)
+            end
+
+            function Legolas.row(schema::$quoted_schema_type; fields...)
+                $parent_row_invocation
+                return Legolas._row(schema; fields...)
+            end
         end
-
-        # function Legolas._apply(::$schema_type; $([Expr(:kw, f, :missing) for f in field_names]...), other...)
-        #     $(map(esc, fields)...)
-        #     return (; $([Expr(:kw, f, f) for f in field_names]...), other...)
-        # end
-
-        # function Legolas.apply(schema::$schema_type; fields...)
-        #     $parent_apply
-        #     return _apply(schema; fields...)
-        # end
+        nothing
     end
 end
+
+
