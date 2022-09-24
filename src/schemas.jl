@@ -147,7 +147,6 @@ schema_qualified_string(schema::Schema) = throw(UnknownSchemaError(schema))
 TODO
 
 - returns NamedTuple of DataTypes
-- typeintersect to combine
 """
 schema_fields(schema::Schema) = throw(UnknownSchemaError(schema))
 
@@ -183,58 +182,35 @@ Arrow.ArrowTypes.fromarrow(::Type{<:Schema}, qualified_string) = Schema(qualifie
 ##### `Tables.Schema` validation
 #####
 
-#=
-function validate(tables_schema, legolas_schema)
-    result = find_violation(tables_schema, legolas_schema)
-    isnothing(result) && return nothing
-    field, violation = result
-    ismissing(violation) || throw(ArgumentError("could not find expected field `$field::$T` in $tables_schema"))
-    throw(ArgumentError("field `$field` has unexpected type; expected <:$T, found $violation"))
-end
-
 """
-    Legolas.validate(tables_schema::Tables.Schema, legolas_schema::Legolas.Schema)
+    Legolas.find_violation(tables_schema::Tables.Schema, legolas_schema::Legolas.Schema)
 
-Throws an `ArgumentError` if `tables_schema` does not comply with `legolas_schema`, otherwise
-returns `nothing`.
-
-Specifically, `tables_schema` is considered to comply with `legolas_schema` if:
+TODO
 
 - every non-`>:Missing` field required by `legolas_schema` is present in `tables_schema`.
 - `T <: S` for each field `f::T` in `tables_schema` that matches a required `legolas_schema` field `f::S`.
 """
-validate(::Tables.Schema, s::Legolas.Schema) = throw(UnknownSchemaError(s))
+find_violation(::Tables.Schema, schema::Schema) = throw(UnknownSchemaError(schema))
 
-function _validate end
+function _find_violation end
 
 """
+    Legolas.validate(tables_schema::Tables.Schema, legolas_schema::Legolas.Schema)
+
 TODO
+
+Throws an `ArgumentError` if ____, otherwise returns `nothing`.
 """
-find_violation(::Tables.Schema, s::Legolas.Schema) = throw(UnknownSchemaError(s))
-
-function _complies_with end
-
-function _check_expected_field(schema::Tables.Schema, name::Symbol, ::Type{T}) where {T}
-    i = findfirst(==(name), schema.names)
-    if isnothing(i)
-        Missing <: T || return missing
-    else
-        schema.types[i] <: T || return schema.types[i]
-    end
-    return nothing
-end
-
-find_violation()
-
-function validate_expected_field(schema, name, T)
-    result = _check_expected_field(schema, name, T)
+function validate(tables_schema::Tables.Schema, legolas_schema::Schema)
+    result = find_violation(tables_schema, legolas_schema)
     isnothing(result) && return nothing
-    ismissing(result) || throw(ArgumentError("could not find expected field `$name::$T` in $schema"))
-    throw(ArgumentError("field `$name` has unexpected type; expected <:$T, found $result"))
+    field, violation = result
+    ismissing(violation) || throw(ArgumentError("could not find expected field `$field` in $tables_schema"))
+    expected = getfield(schema_fields(legolas_schema), field)
+    throw(ArgumentError("field `$field` has unexpected type; expected <:$expected, found $violation"))
 end
 
-complies_with_expected_field(schema, name, T) = isnothing(_check_expected_field(schema, name, T))
-=#
+complies_with(tables_schema::Tables.Schema, legolas_schema::Schema) = isnothing(find_violation(tables_schema, legolas_schema))
 
 #####
 ##### `row`
@@ -294,6 +270,16 @@ function _validate_wrt_parent(child_fields::NamedTuple, parent::Schema)
     return nothing
 end
 
+function _check_for_expected_field(schema::Tables.Schema, name::Symbol, ::Type{T}) where {T}
+    i = findfirst(==(name), schema.names)
+    if isnothing(i)
+        Missing <: T || return missing
+    else
+        schema.types[i] <: T || return schema.types[i]
+    end
+    return nothing
+end
+
 # Note that there exists a clean generic approach for implementing `row` that is applicable
 # to the other Legolas functions that similarly compose child/parent schema behaviors:
 #
@@ -325,15 +311,27 @@ macro schema(schema_expr, field_exprs...)
     quoted_schema_type = Base.Meta.quot(typeof(schema))
     quoted_parent = Base.Meta.quot(parent)
 
-    declared_string = "TODO"
+    check_for_expected_field_statements = map(fields) do f
+        return quote
+            result = Legolas._check_for_expected_field(tables_schema, $(Base.Meta.quot(f.name)), $(esc(f.type)))
+            isnothing(result) || return result
+        end
+    end
+
     qualified_string = string(schema_name(schema), '@', schema_version(schema))
+    declared_string = qualified_string
     total_schema_fields = field_names_types
     parent_row_invocation = nothing
+    parent_find_violation_invocation = nothing
     if !isnothing(parent)
-        declared_string = "TODO"
         qualified_string = :(string($qualified_string, '>', Legolas.schema_qualified_string($quoted_parent)))
-        total_schema_fields = :(merge(schema_fields(parent), $total_schema_fields))
+        declared_string = string(qualified_string, '>', schema_name(parent), '@', schema_version(parent))
+        total_schema_fields = :(merge(Legolas.schema_fields(parent), $total_schema_fields))
         parent_row_invocation = :(fields = Legolas.row($quoted_parent; fields...))
+        parent_find_violation_invocation = quote
+            result = Legolas.find_violation(tables_schema, $quoted_parent)
+            isnothing(result) || return result
+        end
     end
 
     quoted_schema_declaration = Base.Meta.quot(declared_string => Dict(f.name => f.statement for f in fields))
@@ -361,6 +359,16 @@ macro schema(schema_expr, field_exprs...)
             function Legolas.row(schema::$quoted_schema_type; fields...)
                 $parent_row_invocation
                 return Legolas._row(schema; fields...)
+            end
+
+            function Legolas._find_violation(tables_schema::Tables.Schema, legolas_schema::$quoted_schema_type)
+                $(check_for_expected_field_statements...)
+                return nothing
+            end
+
+            function Legolas.find_violation(tables_schema::Tables.Schema, legolas_schema::$quoted_schema_type)
+                $parent_find_violation_invocation
+                return Legolas._find_violation(tables_schema, legolas_schema)
             end
         end
         nothing

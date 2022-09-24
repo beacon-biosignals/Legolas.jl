@@ -32,7 +32,6 @@ schema declarations is of questionable utility in the first place.
 - otherwise resolves/obviates:
     - https://github.com/beacon-biosignals/Legolas.jl/issues/49
     - https://github.com/beacon-biosignals/Legolas.jl/issues/50
-    - https://github.com/beacon-biosignals/Legolas.jl/issues/44
     - https://github.com/beacon-biosignals/Legolas.jl/issues/41
 
 TODO: deprecations for:
