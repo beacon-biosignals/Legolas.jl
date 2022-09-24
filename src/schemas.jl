@@ -311,13 +311,6 @@ macro schema(schema_expr, field_exprs...)
     quoted_schema_type = Base.Meta.quot(typeof(schema))
     quoted_parent = Base.Meta.quot(parent)
 
-    check_for_expected_field_statements = map(fields) do f
-        return quote
-            result = Legolas._check_for_expected_field(tables_schema, $(Base.Meta.quot(f.name)), $(esc(f.type)))
-            isnothing(result) || return result
-        end
-    end
-
     qualified_string = string(schema_name(schema), '@', schema_version(schema))
     declared_string = qualified_string
     total_schema_fields = field_names_types
@@ -335,6 +328,12 @@ macro schema(schema_expr, field_exprs...)
     end
 
     quoted_schema_declaration = Base.Meta.quot(declared_string => Dict(f.name => f.statement for f in fields))
+    check_for_expected_field_statements = map(fields) do f
+        return quote
+            result = Legolas._check_for_expected_field(tables_schema, $(Base.Meta.quot(f.name)), $(esc(f.type)))
+            isnothing(result) || return result
+        end
+    end
     return quote
         if Legolas.schema_registered($quoted_schema) && Legolas.schema_declaration($quoted_schema) != $quoted_schema_declaration
             throw(SchemaDeclarationError("invalid schema redefinition TODO"))
