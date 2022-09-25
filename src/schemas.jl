@@ -308,6 +308,7 @@ macro schema(schema_expr, field_exprs...)
     fields = [(name=stmt.args[1].args[1], type=stmt.args[1].args[2], statement=stmt)
               for stmt in map(_normalize_field, field_exprs)]
     allunique(f.name for f in fields) || throw(SchemaDeclarationError("duplicate field names in declarations TODO"))
+    any(f.name == :__extra__ for f in fields) && throw(SchemaDeclarationError("field name cannot be `__extra__` since that is reserved TODO"))
     field_names_types = Expr(:tuple, (:($(f.name) = $(f.type)) for f in fields)...)
 
     quoted_schema = Base.Meta.quot(schema)
@@ -354,9 +355,10 @@ macro schema(schema_expr, field_exprs...)
 
             Legolas.schema_declaration(::$quoted_schema_type) = $quoted_schema_declaration
 
-            function Legolas._row(::$quoted_schema_type; $([Expr(:kw, esc(f.name), :missing) for f in fields]...), other...)
+            function Legolas._row(::$quoted_schema_type; $((Expr(:kw, esc(f.name), :missing) for f in fields)...), extra...)
+                $(esc(:__extra__)) = NamedTuple(extra)
                 $((esc(f.statement) for f in fields)...)
-                return (; $([Expr(:kw, esc(f.name), esc(f.name)) for f in fields]...), other...)
+                return (; $([Expr(:kw, esc(f.name), esc(f.name)) for f in fields]...), extra...)
             end
 
             function Legolas.row(schema::$quoted_schema_type; fields...)

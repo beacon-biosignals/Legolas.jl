@@ -135,27 +135,42 @@ fields = (a=1.0, b="hi", c=π, d=[1, 2, 3])
         y::String = string(y))
 @alias("example.bar", Bar)
 
-# The `row` function will then execute these custom field statements every time `row(::Bar{1}; ...)`
-# is invoked. If helpful, you can imagine that the `row` method definition generated for `Bar{1}`
-# is roughly equivalent to:
+# These statements are then inlined into the `Bar{1}`'s `row` definition, such
+# that the resulting method is roughly equivalent to:
 #
-#   function Legolas.row(::Bar{1}; x=missing, y=missing, other...)
+#   function Legolas.row(::Bar{1}; x=missing, y=missing, __hidden__...)
+#       __extra__ = NamedTuple(__hidden__)
 #       x::Union{Int8,Missing} = ismissing(x) ? x : clamp(x, Int8),
 #       y::String = string(y)
-#       return (; x, y, other...)
+#       return (; x, y, __hidden__...)
 #   end
 #
-# Demonstrating that the behavior in practice aligns with the above description:
+# ...such that invocations `row(::Bar{1}; ...)` have the following behavior:
 @test row(Bar{1}(); x=200, y=:hi) == (x=127, y="hi")
 @test isequal(row(Bar{1}(); y=:hi), (x=missing, y="hi"))
+
+# Astute readers of the above generated definition might ask "Wait, what's going
+# on with that weird `__extra__` field?" This generated binding enables schema
+# authors to inspect and use any extra non-required fields provided to `row` in
+# their custom field assignments. For example:
+@schema("example.baz@1", a::String = string(get(__extra__, :b, a)))
+@alias("example.baz", Baz)
+@test row(Baz{1}(); a=:hi) == (; a="hi")
+@test row(Baz{1}(); a=:hi, b=:override) == (; a="override", b=:override)
+
+# While the example above is contrived, this feature can be useful in practice
+# for applying conditional constraints predicated on optional fields and/or
+# implementing deprecation pathways. Note that Legolas prevents authors from
+# rebinding the `__hidden__` set of keyword arguments; authors should take
+# care to avoid otherwise mutating the contents of `__extra__`.
 
 # Custom field assignments enable schema authors to enforce value-level constraints and to imbue
 # `row` with convenient per-field transformations/conversions so that it can accept a wider range
 # of applicable inputs for each field. However, schema authors that use custom field assignments
-# must always take care to **preserve idempotency and avoid side effects / reliance on non-local
-# state**.
+# must always take care to preserve idempotency and avoid side effects / reliance on non-local
+# state.
 #
-# In other words, the following equivalences should always hold for non-pathological schemas:
+# In other words, **the following equivalences should always hold for non-pathological schemas**:
 #
 #   row(schema, fields) == row(schema, fields)
 #   row(schema, row(schema, fields)) == row(schema, fields)
