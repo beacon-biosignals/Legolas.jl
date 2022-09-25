@@ -69,6 +69,8 @@ end
 
 macro alias(schema_name, T)
     schema_name isa String || throw(ArgumentError("`schema_name` must be a `String`"))
+    occursin('@', schema_name) && throw(ArgumentError("`schema_name` provided to `@alias` should not include an `@` version clause"))
+    is_valid_schema_name(schema_name) || throw(ArgumentError("provided `schema_name` is not a valid `Legolas.Schema` name: \"$name\""))
     version_symbol = esc(:v)
     return quote
         const $(esc(T)){$version_symbol} = Legolas.Schema{Symbol($schema_name),$version_symbol}
@@ -291,7 +293,8 @@ end
 #
 # However, basic benchmarking as of Julia 1.6 demonstrates that the additional `parent isa Schema`
 # branch in the above approach can induce unnecessary allocations for schemas with a few ancestors,
-# while the approach below (which "hardcodes" the known result of this branch) does not.
+# while the approach below (which "hardcodes" the known result of this branch at definition time)
+# does not.
 #
 # Note also that we cannot just interpolate the parent's declared field statements directly
 # into the child's `row` definition, since the parent's field statements may reference bindings
@@ -329,9 +332,10 @@ macro schema(schema_expr, field_exprs...)
 
     quoted_schema_declaration = Base.Meta.quot(declared_string => Dict(f.name => f.statement for f in fields))
     check_for_expected_field_statements = map(fields) do f
+        fname = Base.Meta.quot(f.name)
         return quote
-            result = Legolas._check_for_expected_field(tables_schema, $(Base.Meta.quot(f.name)), $(esc(f.type)))
-            isnothing(result) || return result
+            result = Legolas._check_for_expected_field(tables_schema, $fname, $(esc(f.type)))
+            isnothing(result) || return $fname => result
         end
     end
     return quote

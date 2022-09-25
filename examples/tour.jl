@@ -5,53 +5,77 @@
 
 using Legolas, Arrow, Tables, Test
 
-using Legolas: @schema, @alias, complies_with, validate, apply
+using Legolas: @schema, Schema, @alias, complies_with, find_violation, validate, row
 
 #####
 ##### Introduction
 #####
+
 # Legolas provides mechanisms for constructing, reading, writing, and validating
 # Tables.jl-compliant values against extensible, versioned, user-specified *schemas*.
 
+# We'll dive into the extensibility and versioning aspects of Legolas later. For now,
+# let's start the tour by declaring a new Legolas schema via the `@schema` macro.
+
 # Each Legolas schema declaration must specify the declared schema's name, version,
 # and the set of required fields that a given row value must contain in order to comply
-# with that schema. Let's use the `@schema` macro to declare a new schema named `"foo"`
-# at an initial version `1` with the given required fields:
-@schema("foo@1",
+# with that schema. Let's use the `@schema` macro to declare a new schema named
+# `example.foo` at an initial version `1` with the given required fields:
+@schema("example.foo@1",
         a::Real,
         b::String,
         c,
         d::AbstractVector)
 
 # This `@schema` declaration automatically overloaded a bunch of methods with respect to
-# a special type corresponding to the "foo@1` schema. We can create new instances of this
-# type via `Legolas.Schema`:
-@test Legolas.Schema("foo@1") isa Legolas.Schema{:foo,1}
-@test Legolas.Schema("foo@1") == Legolas.Schema("foo", 1) # this constructor is also available
+# a special type corresponding to the `example.foo@1` schema. We can create new instances
+# of this type via `Legolas.Schema`:
+@test Schema("example.foo@1") isa Schema{Symbol("example.foo"),1}
+@test Schema("example.foo@1") == Schema("example.foo", 1)
 
-# Let's declare a convenience type alias `Foo{v}` that can be used to more succinctly
-# construct `Legolas.Schema("foo", v)` instances:
-@alias("foo", Foo)
+# We can use `@alias` to declare a type alias `Foo{v}` that can be used to more succinctly refer
+# to `Schema{Symbol("example.foo"),1}` and construct instances of the `example.foo@1` schema:
+@alias("example.foo", Foo)
+@test Foo{1} == Schema{Symbol("example.foo"),1}
+@test Foo{1}() == Schema("example.foo", 1)
 
-# We can use `Legolas.complies_with` to check whether a given `Tables.Schema` (ref https://tables.juliadata.org/stable/#Tables.Schema)
-# complies with the `foo@1` schema. For example, all of the following schemas comply with `foo@1`:
+#####
+##### Schema Compliance/Validation
+#####
+
+# We can use `complies_with`, `validate`, and `find_violation` to check whether a given
+# `Tables.Schema` (ref https://tables.juliadata.org/stable/#Tables.Schema) complies with
+# our `example.foo@1` schema.
+
+# For example, all of the following `Tables.Schema`s comply with `example.foo@1`:
 for s in [Tables.Schema((:a, :b, :c, :d), (Real, String, Any, AbstractVector)), # All required fields must be present...
-          Tables.Schema((:a, :b, :c, :d), (Int, String, Float64, Vector)), # ...and have subtypes that match the schema's declared type constraints.
-          Tables.Schema((:b, :a, :d, :c), (String, Int, Vector, Float64)), # Fields do not have to be in any particular order, as long as they are present.
-          Tables.Schema((:a, :b, :d), (Int, String, Vector)), # Fields whose declared type constraints are `>:Missing` may be elided entirely.
+          Tables.Schema((:a, :b, :c, :d), (Int, String, Float64, Vector)),      # ...and have subtypes that match the schema's declared type constraints.
+          Tables.Schema((:b, :a, :d, :c), (String, Int, Vector, Float64)),      # Fields do not have to be in any particular order, as long as they are present.
+          Tables.Schema((:a, :b, :d), (Int, String, Vector)),                   # Fields whose declared type constraints are `>:Missing` may be elided entirely.
           Tables.Schema((:a, :x, :b, :y, :d), (Int, Any, String, Any, Vector))] # Non-required fields may also be present.
+    # if `complies_with` finds a violation, it returns `false`; returns `true` otherwise
     @test complies_with(s, Foo{1}())
-    # `Legolas.validate` is similar to `Legolas.complies_with`, but throws a descriptive
-    # error instead of returning `false` when it finds mismatching fields
+
+    # if `validate` finds a violation, it throws an error indicating the violation;
+    # returns `nothing` otherwise
     @test validate(s, Foo{1}()) isa Nothing
+
+    # if `find_violation` finds a violation, it returns a tuple indicating the relevant
+    # field and its violation; returns `nothing` otherwise
+    @test isnothing(find_violation(s, Foo{1}()))
 end
 
-# ...while these schemas do not:
-for s in [Tables.Schema((:a, :c, :d), (Int, Float64, Vector)), # The required non-`>:Missing` field `b::String` is not present.
-          Tables.Schema((:a, :b, :c, :d), (Int, String, Float64, Any))] # The type of required field `d::AbstractVector` is not `<:AbstractVector`.
-    @test !complies_with(s, Foo{1}())
-    @test_throws ArgumentError validate(s, Foo{1}())
-end
+# ...while the below `Tables.Schema`s do not:
+
+s = Tables.Schema((:a, :c, :d), (Int, Float64, Vector)) # The required non-`>:Missing` field `b::String` is not present.
+@test !complies_with(s, Foo{1}())
+@test_throws ArgumentError validate(s, Foo{1}())
+@test isequal(find_violation(s, Foo{1}()), :b => missing)
+
+s = Tables.Schema((:a, :b, :c, :d), (Int, String, Float64, Any)) # The type of required field `d::AbstractVector` is not `<:AbstractVector`.
+@test !complies_with(s, Foo{1}())
+@test_throws ArgumentError validate(s, Foo{1}())
+@test isequal(find_violation(s, Foo{1}()), :d => Any)
 
 # The expectations that characterize Legolas' particular notion of "schematic compliance" - requiring the
 # presence of pre-specified declared fields, assuming non-present fields to be implicitly `missing`, and allowing
@@ -62,241 +86,105 @@ end
 # core to Legolas' mechanisms for defining, extending, and versioning interfaces to tabular data.
 
 #####
-##### `Legolas.Schema` Application And Per-Field Assignment Operations
+##### `Legolas.row`
 #####
-# We can use `Legolas.apply` to produce a "canonicalized" schema-compliant row value from a given set
-# of  fields, provided as either keyword arguments or as an `Tables.AbstractRow`-compliant value:
-fields = (; a = 1.0, b = "hi", c = π, d = [1,2,3])
-@test apply(Foo{1}(); fields...) == fields
-@test apply(Foo{1}(), fields) == fields
 
-# This may seem like a fairly trivial function in the preceding example, but the `apply` function has
-# some useful and convenient properties. Specifically, input fields provided to `apply` may:
+# `Legolas.row` returns a "canonicalized" schema-compliant row value from a given set of fields,
+# provided as either keyword arguments or as an `Tables.AbstractRow`-compliant value:
+fields = (a=1.0, b="hi", c=π, d=[1, 2, 3])
+@test row(Foo{1}(); fields...) == fields
+@test row(Foo{1}(), fields) == fields
+
+# This may seem like a fairly trivial function in the preceding example, but the `row` function has
+# some useful and convenient properties. Specifically, input fields provided to `row` may:
 #
 # - ...contain required fields in any order
 # - ...elide required fields, in which case the constructor will assume them to be `missing`
 # - ...contain any other fields in addition to the required fields
 #
-# ...while the output of `Legolas.apply` will always:
+# ...while the output of `row` will always:
 #
 # - ...be a `Tables.AbstractRow`-compliant value
 # - ...comply with the provided schema (otherwise an exception will be thrown)
-# - ...contain all required fields ("missing" fields are explicitly presented with `missing` values)
+# - ...contain all required fields (missing required fields are explicitly given `missing` values)
 # - ...contain all provided non-required fields
 #
-# ...or else an exception will be thrown. Demonstrating a few of these properties:
+# Demonstrating a few of these properties:
 
 # Providing the additional non-required field `x` in the input, which is preserved in the output:
-@test apply(Foo{1}(); fields..., x = "x") == (; fields..., x = "x")
+@test row(Foo{1}(); fields..., x="x") == (; fields..., x="x")
 
 # Eliding the required field `c`, which is assigned `missing` in the output:
-@test isequal(apply(Foo{1}(); a = 1.0, b = "hi", d = [1,2,3]), (; a = 1.0, b = "hi", c = missing, d = [1,2,3]))
+@test isequal(row(Foo{1}(); a=1.0, b="hi", d=[1, 2, 3]), (a=1.0, b="hi", c=missing, d=[1, 2, 3]))
 
 # Providing the non-compliantly-typed field `d::Int`, inducing a `MethodError`:
-@test_throws MethodError apply(Foo{1}(); a = 1.0, b = "hi", d = 2)
+@test_throws MethodError row(Foo{1}(); a=1.0, b="hi", d=2)
 
 # Implicitly providing the non-compliantly-typed field `d::Missing`, inducing a `MethodError`:
-@test_throws MethodError apply(Foo{1}(); a = 1.0, b = "hi")
-
-
-#=
-
-
-# We can `apply` our `Schema` instance to a set of fields to construct a `Tables.AbstractRow`-compliant
-# value (see https://tables.juliadata.org/stable/#Tables.AbstractRow-1 for details):
-row = apply(MySchema{1}(); a=1.5, b="hello", c="goodbye", d=2, e=["anything"])
-
-# By examining `row`'s fields, we can see how the assignment expressions from our original
-# `@schema` declaration were applied in a simple linear fashion to the input arguments:
-@test row.a == sin(1.5)
-@test row.b == string(sin(1.5), "hello", "goodbye")
-@test row.c == [sin(1.5), string(sin(1.5), "hello", "goodbye"), "goodbye"]
-@test row.d == 2
-@test row.e == ["anything"]
-
-# In fact, the field assignment expressions provided to the `@schema` macro are interpolated
-# nearly as-is into the underlying code generated by `@schema`. For example, the relevant code
-# generated by our `@schema` declaration above looks roughly like:
-#
-#     function Legolas._apply(::typeof(Legolas.Schema("my-schema", 1));
-#                             a=missing, b=missing, c=missing, d=missing, e=missing,
-#                             other...)
-#         a::Real = sin(a)
-#         b::String = string(a, b, c)
-#         c::Any = [a, b, c]
-#         d::Int = d
-#         e::Any = e
-#         return (; a, b, c, d, e, other...)
-#     end
-#
-# This `Legolas._apply` method is invoked at the core of the `Legolas.apply`. As you might have
-# noticed, `Legolas.apply` has two interesting properties we haven't yet demonstrated.
-#
-# Here we demonstrate the first property - required fields have a `missing` value by default:
-x = apply(MySchema{1}(), a=1.5, b="hello", c="goodbye", d=2)
-y = apply(MySchema{1}(), (; a=1.5, b="hello", c="goodbye", d=2, e=missing))
-@test isequal(x, y)
-
-# ...so this correctly throws a `MethodError` when evaluating `d::Int = missing`:
-@test_throws MethodError apply(MySchema{1}(), a=1.5, b="hello", c="goodbye")
-
-# And here's a demonstration of the second property - callers may pass in any other fields in
-# addition to the required fields:
-row = apply(MySchema{1}(); a=1.5, b="hello", c="goodbye", my_other_field=":)", d=2, e=["anything"])
-@test row.my_other_field == ":)"
-
-# Finally, there's also an `apply` method that accepts any `Tables.AbstractRow`-compliant value,
-# and extracts all input fields from that value. Here, we demonstrate with a `NamedTuple`:
-@test row == apply(MySchema{1}(), (a=1.5, b="hello", c="goodbye", d=2, e=["anything"], my_other_field=":)"))
-
-# To summarize:
-#
-# - Inputs to `Legolas.apply`...
-#     - ...may be any `Tables.AbstractRow`-compliant value
-#     - ...may contain required fields in any order
-#     - ...may elide required fields, in which case the constructor will assume them to be `missing`
-#     - ...may contain any other fields in addition to the required fields
-# - The output of `Legolas.apply`...
-#     - ...will be a `Tables.AbstractRow`-compliant value
-#     - ...will comply with the given schema
-#     - ...will contain all required fields ("missing" fields are explicitly presented with `missing` values)
-#     - ...will contain all provided non-required fields
-
-########################################################################################
-########################################################################################
-########################################################################################
-
-
-
-
-
-# Each Legolas schema specifies its own name, version, and set of required fields. Any `Tables.AbstractRow`-compliant
-# value (see https://tables.juliadata.org/stable/#Tables.AbstractRow-1) that contains these required fields is
-# considered to be "compliant" with that schema.
-
-# The
-
-
-# Our `@schema` declaration automatically defined/overloaded a bunch of handy methods with respect
-# to our `Legolas.Schema{:foo,1}` type.
-
-
-# Now we can pass *instances* of this sche
-
-########################################################################################
-########################################################################################
-########################################################################################
-
-# Legolas defines a notion of a *schema*
-
-# which callers can use
-# define new [`Tables.AbstractRow`-compliant](https://tables.juliadata.org/stable/#Tables.AbstractRow-1)
-# row types that exhibit some opinionated (but desirable!) properties w.r.t. composability/extensibility.
-#
-# These row type properties are fundamental to the wider data curation patterns that Legolas.jl seeks to
-# facilitate, so let's explore them before we dig deeper into Legolas.jl's other table-centric utilities.
-
-
-
-
-# We can `apply` our `Schema` instance to a set of fields to construct a `Tables.AbstractRow`-compliant
-# value (see https://tables.juliadata.org/stable/#Tables.AbstractRow-1 for details):
-
-`Tables.AbstractRow`-compliant](https://tables.juliadata.org/stable/#Tables.AbstractRow-1)
-
-row value must have in order to
-# compl
-
-required fields and transformations associated
-
-
-# Declare a `Legolas.Schema` with name `"my-schema"` at version `1` whose *required fields*
-# `a`, `b`, `c`, `d`, and `e` are specified via the provided assignment expressions:
-@schema("my-schema@1",
-        a::Real = sin(a),
-        b::String = string(a, b, c),
-        c = [a, b, c],
-        d::Int,
-        e)
-
-
-
-@test MySchema{1}() == Legolas.Schema("my-schema", 1)
-@test MySchema{1}() == Legolas.Schema("my-schema@1")
+@test_throws MethodError row(Foo{1}(); a=1.0, b="hi")
 
 #####
-##### Applying Our New Legolas Schema
+##### Custom Field Assignments
 #####
-# which callers can use
-# define new [`Tables.AbstractRow`-compliant](https://tables.juliadata.org/stable/#Tables.AbstractRow-1)
-# row types that exhibit some opinionated (but desirable!) properties w.r.t. composability/extensibility.
+
+# Schema authors may tailor the behavior of `row` for their schema by defining custom field
+# assignments in the schema's declaration. The `example.foo@1` schema declaration doesn't feature
+# any such assignments, so let's declare a new schema `example.bar@1` that does:
+@schema("example.bar@1",
+        x::Union{Int8,Missing} = ismissing(x) ? x : clamp(x, Int8),
+        y::String = string(y))
+@alias("example.bar", Bar)
+
+# The `row` function will then execute these custom field statements every time `row(::Bar{1}; ...)`
+# is invoked. If helpful, you can imagine that the `row` method definition generated for `Bar{1}`
+# is roughly equivalent to:
 #
-# These row type properties are fundamental to the wider data curation patterns that Legolas.jl seeks to
-# facilitate, so let's explore them before we dig deeper into Legolas.jl's other table-centric utilities.
-
-
-# We can `apply` our `Schema` instance to a set of fields to construct a `Tables.AbstractRow`-compliant
-# value (see https://tables.juliadata.org/stable/#Tables.AbstractRow-1 for details):
-row = apply(MySchema{1}(); a=1.5, b="hello", c="goodbye", d=2, e=["anything"])
-
-# By examining `row`'s fields, we can see how the assignment expressions from our original
-# `@schema` declaration were applied in a simple linear fashion to the input arguments:
-@test row.a == sin(1.5)
-@test row.b == string(sin(1.5), "hello", "goodbye")
-@test row.c == [sin(1.5), string(sin(1.5), "hello", "goodbye"), "goodbye"]
-@test row.d == 2
-@test row.e == ["anything"]
-
-# In fact, the field assignment expressions provided to the `@schema` macro are interpolated
-# nearly as-is into the underlying code generated by `@schema`. For example, the relevant code
-# generated by our `@schema` declaration above looks roughly like:
+#   function Legolas.row(::Bar{1}; x=missing, y=missing, other...)
+#       x::Union{Int8,Missing} = ismissing(x) ? x : clamp(x, Int8),
+#       y::String = string(y)
+#       return (; x, y, other...)
+#   end
 #
-#     function Legolas._apply(::typeof(Legolas.Schema("my-schema", 1));
-#                             a=missing, b=missing, c=missing, d=missing, e=missing,
-#                             other...)
-#         a::Real = sin(a)
-#         b::String = string(a, b, c)
-#         c::Any = [a, b, c]
-#         d::Int = d
-#         e::Any = e
-#         return (; a, b, c, d, e, other...)
-#     end
+# Demonstrating that the behavior in practice aligns with the above description:
+@test row(Bar{1}(); x=200, y=:hi) == (x=127, y="hi")
+@test isequal(row(Bar{1}(); y=:hi), (x=missing, y="hi"))
+
+# Custom field assignments enable schema authors to enforce value-level constraints and to imbue
+# `row` with convenient per-field transformations/conversions so that it can accept a wider range
+# of applicable inputs for each field. However, schema authors that use custom field assignments
+# must always take care to **preserve idempotency and avoid side effects / reliance on non-local
+# state**.
 #
-# This `Legolas._apply` method is invoked at the core of the `Legolas.apply`. As you might have
-# noticed, `Legolas.apply` has two interesting properties we haven't yet demonstrated.
+# In other words, the following equivalences should always hold for non-pathological schemas:
 #
-# Here we demonstrate the first property - required fields have a `missing` value by default:
-x = apply(MySchema{1}(), a=1.5, b="hello", c="goodbye", d=2)
-y = apply(MySchema{1}(), (; a=1.5, b="hello", c="goodbye", d=2, e=missing))
-@test isequal(x, y)
-
-# ...so this correctly throws a `MethodError` when evaluating `d::Int = missing`:
-@test_throws MethodError apply(MySchema{1}(), a=1.5, b="hello", c="goodbye")
-
-# And here's a demonstration of the second property - callers may pass in any other fields in
-# addition to the required fields:
-row = apply(MySchema{1}(); a=1.5, b="hello", c="goodbye", my_other_field=":)", d=2, e=["anything"])
-@test row.my_other_field == ":)"
-
-# Finally, there's also an `apply` method that accepts any `Tables.AbstractRow`-compliant value,
-# and extracts all input fields from that value. Here, we demonstrate with a `NamedTuple`:
-@test row == apply(MySchema{1}(), (a=1.5, b="hello", c="goodbye", d=2, e=["anything"], my_other_field=":)"))
-
-# To summarize:
+#   row(schema, fields) == row(schema, fields)
+#   row(schema, row(schema, fields)) == row(schema, fields)
 #
-# - Inputs to `Legolas.apply`...
-#     - ...may be any `Tables.AbstractRow`-compliant value
-#     - ...may contain required fields in any order
-#     - ...may elide required fields, in which case the constructor will assume them to be `missing`
-#     - ...may contain any other fields in addition to the required fields
-# - The output of `Legolas.apply`...
-#     - ...is a `Tables.AbstractRow`-compliant value
-#     - ...will contain all required fields ("missing" fields are explicitly presented with `missing` values)
-#     - ...will contain all provided non-required fields
+# These are two very important expectations that must be met for `row` to behave as intended,
+# but they are not enforceable by Legolas itself, since custom field assignments allow arbitrary
+# Julia code; thus, schema authors are responsible for not violating these expectations.
+#
+# For illustration's sake, here is an example of a pathological schema declaration that violates
+# both of these expectations:
+
+const GLOBAL_STATE = Ref(0)
+
+@schema("example.bad@1",
+        x::Int = x + 1,
+        y = (GLOBAL_STATE[] += y; GLOBAL_STATE[]))
+@alias("example.bad", Bad)
+
+# Demonstration of non-idempotency, both in `x` and `y` fields:
+@test row(Bad{1}(), row(Bad{1}(), (x=1, y=1))) != row(Bad{1}(), (x=1, y=1))
+
+# Demonstration of side effects / reliance on non-local state in `y` field:
+@test row(Bad{1}(), (x=1, y=1)) != row(Bad{1}(), (x=1, y=1))
 
 #####
 ##### Extending Existing Schemas
 #####
+
+#=
 # Schemas declared via `@schema` can inherit the fields and transformations specified by other schema declarations.
 # Niftily, the properties of schema application that we demonstrated above enable this extension mechanism to be
 # implemented via composition under the hood.
