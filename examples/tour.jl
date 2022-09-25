@@ -5,7 +5,8 @@
 
 using Legolas, Arrow, Tables, Test
 
-using Legolas: @schema, Schema, @alias, complies_with, find_violation, validate, row
+using Legolas: @schema, Schema, @alias, complies_with, find_violation, validate,
+               row, schema_fields
 
 #####
 ##### Introduction
@@ -132,21 +133,23 @@ fields = (a=1.0, b="hi", c=π, d=[1, 2, 3])
 # any such assignments, so let's declare a new schema `example.bar@1` that does:
 @schema("example.bar@1",
         x::Union{Int8,Missing} = ismissing(x) ? x : clamp(x, Int8),
-        y::String = string(y))
+        y::String = string(y),
+        z::String = ismissing(z) ? string(y, '_', x) : z)
 @alias("example.bar", Bar)
 
 # These statements are then inlined into `Bar{1}`'s generated `row` method
-# definition, which is roughly equivalent to:
+# definition, which becomes roughly equivalent to:
 #
 #   function Legolas.row(::Bar{1}; x=missing, y=missing, __extra__...)
-#       x::Union{Int8,Missing} = ismissing(x) ? x : clamp(x, Int8),
-#       y::String = string(y)
+#       x::Union{Int8,Missing} = ismissing(x) ? x : clamp(x, Int8)
+#       y::String = string(y, '_', x)
 #       return (; x, y, __extra__...)
 #   end
 #
 # ...such that invocations `row(::Bar{1}; ...)` have the following behavior:
-@test row(Bar{1}(); x=200, y=:hi) == (x=127, y="hi")
-@test isequal(row(Bar{1}(); y=:hi), (x=missing, y="hi"))
+@test row(Bar{1}(); x=200, y=:hi) == (x=127, y="hi", z="hi_127")
+@test isequal(row(Bar{1}(); y=:hi), (x=missing, y="hi", z="hi_missing"))
+@test row(Bar{1}(); x=200, y=:hi, z="bye") == (x=127, y="hi", z="bye")
 
 # Custom field assignments enable schema authors to enforce value-level constraints and to imbue
 # `row` with convenient per-field transformations/conversions so that it can accept a wider range
@@ -160,12 +163,17 @@ fields = (a=1.0, b="hi", c=π, d=[1, 2, 3])
 #   row(schema, row(schema, fields)) == row(schema, fields)
 #
 # These are two very important expectations that must be met for `row` to behave as intended,
-# but they are not enforceable by Legolas itself, since custom field assignments allow arbitrary
-# Julia code; thus, schema authors are responsible for not violating these expectations.
+# but they are not enforceable by Legolas itself, since Legolas allows custom field assignments
+# to include arbitrary Julia code; thus, schema authors are responsible for not violating these
+# expectations.
 #
+# Let's check that `Bar{1}` meets these expectations:
+fields = (x=200, y=:hi)
+@test row(Bar{1}(), fields) == row(Bar{1}(), fields)
+@test row(Bar{1}(), row(Bar{1}(), fields)) == row(Bar{1}(), fields)
+
 # For illustration's sake, here is an example of a pathological schema declaration that violates
 # both of these expectations:
-
 const GLOBAL_STATE = Ref(0)
 
 @schema("example.bad@1",
@@ -183,42 +191,62 @@ const GLOBAL_STATE = Ref(0)
 ##### Extending Existing Schemas
 #####
 
+# Schemas declared via `@schema` can inherit the required fields specified by previous schema declarations.
+# Here, we define the schema `example.baz@1` which "extends" the schema `example.bar@1`:
+@schema("example.baz@1" > "example.bar@1",
+        x::Int8,
+        z::String,
+        k::Int = length(z))
+@alias("example.baz", Baz)
+
+# Notice how the child schema's declaration may reference the parent's schema fields (but need not reference
+# every single one), may tighten the constraints of the parent schema's required fields, and may introduce
+# new required fields atop the parent schema's required fields.
+
+# For a given Legolas schema extension to be valid, all possible row types that comply with the child schema
+# must comply with the parent schema, but the reverse need not be true. We can check schemas' required fields
+# and their type constraints via `schema_fields`. Based on these outputs, it is a worthwhile exercise to confirm
+# for yourself that `Baz{1}` is a valid extension of `Bar{1}` under the aforementioned rule:
+@test schema_fields(Bar{1}()) == (x=Union{Missing,Int8}, y=String, z=String)
+@test schema_fields(Baz{1}()) == (x=Int8, y=String, z=String, k=Int)
+
+# As a counterexample, the following is invalid, because the declaration of `x::Any` would allow for `x`
+# values that are disallowed by the parent schema `example.bar@1`:
+@test_throws Legolas.SchemaDeclarationError @schema("example.broken@1" > "example.bar@1", x::Any)
+
+# When `row` is evaluated against an extension schema, it will apply the parent schema's field
+# assignments before applying the child schema's field assignments. Notice how `row` applies the
+# constraints/transformations of the parent and child schemas in the below examples:
+@test row(Baz{1}(); x=200, y=:hi) == (x=127, z="hi_127", k=6, y="hi")
+@test_throws MethodError row(Baz{1}(); y=:hi) # `Baz{1}` does not allow `x::Missing`
+
+# `Baz{1}`'s generated `row` method definition is thus roughly equivalent to:
+#
+#   function Legolas.row(::Baz{1}; fields...)
+#       fields = row(Bar{1}(), fields)
+#       return Legolas._row(Baz{1}; fields...)
+#   end
+#
+#   function Legolas._row(::Baz{1}; x=missing, z=missing, k=missing, __extra__...)
+#       x::Int8 = x
+#       z::String = z
+#       k::Int = length(z)
+#       return (; x, z, k, __extra__...)
+#   end
+
+# One last note on syntax: You might ask "Why use `>` as the inheritance operator instead of `<:`?" There are two reasons.
+# The primary reason is purely historical: earlier versions of Legolas did not as rigorously demand/enforce subtyping
+# relationships between parent and child schemas' required fields, and so the `<:` operator was considered to be a bit
+# too misleading. A secondary reason in favor of `>` was that it implied the actual order of application of field
+# constraints/transformations (i.e. the parent's are applied before the child's).
+
+#####
+##### Schema Versioning
+#####
+
+
+
 #=
-# Schemas declared via `@schema` can inherit the fields and transformations specified by other schema declarations.
-# Niftily, the properties of schema application that we demonstrated above enable this extension mechanism to be
-# implemented via composition under the hood.
-
-# Declare a row type whose schema is named `"my-child-schema"` at version `1` that inherits the fields of the
-# `my-schema@1` schema that we defined in the previous section.
-@schema("my-child-schema@1" > "my-schema@1",
-        d, # "declaring" the underlying `my-schema@1` field here so that it
-           # can be referenced in our definition for the `f` field.
-        f::Int = f + d,
-        g::String,
-        c = last(c))
-
-# The constructor for `MyChildRow` will first apply its parent's transformation before applying its own. The
-# effect of this behavior can be seen clearly in the `c` field value in the following example:
-input = (a=1.5, b="hello", c="goodbye", d=2, e=["anything"], f=3, g="foo")
-child = apply(MyChildSchema{1}(), input)
-@test child.a == sin(1.5)
-@test child.b == string(sin(1.5), "hello", "goodbye")
-@test child.c == "goodbye"
-@test child.d == 2
-@test child.e == ["anything"]
-@test child.f == 5
-@test child.g == "foo"
-
-# Note that even though we didn't write down any constraints on `d` in our `my-child-schema@1` definition,
-# that field still undergoes the parent transformation (defined by `my-schema@1`) where it is constrained
-# to `d::Int`.
-@test_throws InexactError MyChildRow(Tables.rowmerge(child; d=1.5))
-
-# A note on syntax: You might ask "Why use `>` as the inheritance operator instead of `<:`?" There are actually three reasons. Firstly,
-# `<:` is canonically a subtyping operator that implies the Liskov substition principle, but because Legolas allow arbitrary RHS code in
-# required field declarations, a "child" row is not de facto substitutable for its parent. Secondly, `>` implies the actual ordering that
-# row transformations are applied in; the parent transformation comes before the child transformation. Thirdly, the child row will usually
-# (though technically not always) have a greater total number of required fields than the parent row.
 
 #####
 ##### Validating/Writing/Reading `Arrow.Table`s with Legolas.jl

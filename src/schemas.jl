@@ -322,7 +322,7 @@ macro schema(schema_expr, field_exprs...)
     if !isnothing(parent)
         qualified_string = :(string($qualified_string, '>', Legolas.schema_qualified_string($quoted_parent)))
         declared_string = string(qualified_string, '>', schema_name(parent), '@', schema_version(parent))
-        total_schema_fields = :(merge(Legolas.schema_fields(parent), $total_schema_fields))
+        total_schema_fields = :(merge(Legolas.schema_fields($quoted_parent), $total_schema_fields))
         parent_row_invocation = :(fields = Legolas.row($quoted_parent; fields...))
         parent_find_violation_invocation = quote
             result = Legolas.find_violation(tables_schema, $quoted_parent)
@@ -356,7 +356,7 @@ macro schema(schema_expr, field_exprs...)
 
             function Legolas._row(::$quoted_schema_type; $((Expr(:kw, esc(f.name), :missing) for f in fields)...), extra...)
                 $((esc(f.statement) for f in fields)...)
-                return (; $([Expr(:kw, esc(f.name), esc(f.name)) for f in fields]...), extra...)
+                return (; $((Expr(:kw, esc(f.name), esc(f.name)) for f in fields)...), extra...)
             end
 
             function Legolas.row(schema::$quoted_schema_type; fields...)
