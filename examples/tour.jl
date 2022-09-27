@@ -30,13 +30,11 @@ using Legolas: @schema, Schema, @alias, complies_with, find_violation, validate,
 # This `@schema` declaration automatically overloaded a bunch of methods with respect to
 # a special type corresponding to the `example.foo@1` schema. We can create new instances
 # of this type via `Legolas.Schema`:
-@test Schema("example.foo@1") isa Schema{Symbol("example.foo"),1}
-@test Schema("example.foo@1") == Schema("example.foo", 1)
+@test Schema("example.foo", 1) == Schema{Symbol("example.foo"),1}()
 
 # We can use `@alias` to declare a type alias `Foo{v}` that can be used to more succinctly refer
 # to `Schema{Symbol("example.foo"),1}` and construct instances of the `example.foo@1` schema:
 @alias("example.foo", Foo)
-@test Foo{1} == Schema{Symbol("example.foo"),1}
 @test Foo{1}() == Schema("example.foo", 1)
 
 #####
@@ -192,7 +190,7 @@ const GLOBAL_STATE = Ref(0)
 
 # Schemas declared via `@schema` can inherit the required fields specified by previous schema declarations.
 # Here, we define the schema `example.baz@1` which "extends" the schema `example.bar@1`:
-@schema("example.baz@1" > "example.bar@1",
+@schema("example.baz@1 > example.bar@1",
         x::Int8,
         z::String,
         k::Int64 = ismissing(k) ? length(z) : k)
@@ -211,7 +209,7 @@ const GLOBAL_STATE = Ref(0)
 
 # As a counterexample, the following is invalid, because the declaration of `x::Any` would allow for `x`
 # values that are disallowed by the parent schema `example.bar@1`:
-@test_throws Legolas.SchemaDeclarationError @schema("example.broken@1" > "example.bar@1", x::Any)
+@test_throws Legolas.SchemaDeclarationError @schema("example.broken@1 > example.bar@1", x::Any)
 
 # When `row` is evaluated against an extension schema, it will apply the parent schema's field
 # assignments before applying the child schema's field assignments. Notice how `row` applies the

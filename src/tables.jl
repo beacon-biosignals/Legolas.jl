@@ -1,5 +1,5 @@
 #####
-##### `guess_schema`
+##### Tables.jl operations/utilities
 #####
 
 function _columns(table)
@@ -20,6 +20,113 @@ function guess_schema(table)
     return Tables.schema(columns)
 end
 
+
+"""
+    locations(collections::Tuple)
+
+Return a `Dict` whose keys are the set of all elements across all provided collections,
+and whose values are the indices that locate each corresponding element across all
+provided collecitons.
+
+Specifically, `locations(collections)[k][i]` will return a `Vector{Int}` whose elements
+are the index locations of `k` in `collections[i]`. If `!(k in collections[i])`, this
+`Vector{Int}` will be empty.
+
+For example:
+
+```
+julia> Legolas.locations((['a', 'b', 'c', 'f', 'b'],
+                          ['d', 'c', 'e', 'b'],
+                          ['f', 'a', 'f']))
+Dict{Char, Tuple{Vector{Int64}, Vector{Int64}, Vector{Int64}}} with 6 entries:
+  'f' => ([4], [], [1, 3])
+  'a' => ([1], [], [2])
+  'c' => ([3], [2], [])
+  'd' => ([], [1], [])
+  'e' => ([], [3], [])
+  'b' => ([2, 5], [4], [])
+```
+
+This function is useful as a building block for higher-level tabular operations
+that require indexing/grouping along specific sets of elements.
+"""
+function locations(collections::T) where {T<:Tuple}
+    N = fieldcount(T)
+    K = promote_type(eltype.(collections)...)
+    results = Dict{K,NTuple{N,Vector{Int}}}()
+    for (c, collection) in enumerate(collections)
+        for (i, item) in enumerate(collection)
+            push!(get!(() -> ntuple(_ -> Int[], N), results, item)[c], i)
+        end
+    end
+    return results
+end
+
+function _iterator_for_column(table, c)
+    Tables.columnaccess(table) && return Tables.getcolumn(_columns(table), c)
+    # there's not really a need to actually materialize this iterable
+    # for the caller, but doing so allows the caller to more usefully
+    # employ `eltype` on this function's output (since e.g. a generator
+    # would just return `Any` for the eltype)
+    return [Tables.getcolumn(r, c) for r in Tables.rows(table)]
+end
+
+"""
+    gather(column_name, tables...; extract=((table, idxs) -> view(table, idxs, :)))
+
+Gather rows from `tables` into a unified cross-table index along `column_name`. Returns
+a `Dict` whose keys are the unique values of `column_name` across `tables`, and whose
+values are tuples of the form:
+
+    (rows_matching_key_in_table_1, rows_matching_key_in_table_2, ...)
+
+The provided `extract` function is used to extract rows from each table; it takes
+as input a table and a `Vector{Int}` of row indices, and returns the corresponding
+subtable. The default definition is sufficient for `DataFrames` tables.
+
+Note that this function may internally call `Tables.columns` on each input table, so
+it may be slower and/or require more memory if `any(!Tables.columnaccess, tables)`.
+
+Note that we intend to eventually migrate this function from Legolas.jl to a more appropriate package.
+"""
+function gather(column_name, tables::Vararg{Any,N};
+                extract=((cols, idxs) -> view(cols, idxs, :))) where {N}
+    iters = ntuple(i -> _iterator_for_column(tables[i], column_name), N)
+    return Dict(id => ntuple(i -> extract(tables[i], locs[i]), N) for (id, locs) in locations(iters))
+end
+
+"""
+    materialize(table)
+
+Return a fully deserialized copy of `table`.
+
+This function is useful when `table` has built-in deserialize-on-access or
+conversion-on-access behavior (like `Arrow.Table`) and you'd like to pay
+such access costs upfront before repeatedly accessing the table.
+
+Note that we intend to eventually migrate this function from Legolas.jl to a more appropriate package.
+"""
+materialize(table) = map(collect, Tables.columntable(table))
+
+#####
+##### read/write Arrow content to generic path types
+#####
+# It would be better if Arrow.jl supported a generic API for nonstandard path-like types so that
+# we can avoid potential intermediate copies here, but its documentation is explicit that it only
+# supports `Union{IO,String}`.
+#
+# TODO: upstream improvements to Arrow.jl to obviate these?
+
+write_full_path(path::AbstractString, bytes) = (mkpath(dirname(path)); Base.write(path, bytes))
+write_full_path(path, bytes) = Base.write(path, bytes)
+
+read_arrow(io_or_path::Union{IO,String,Vector{UInt8}}) = Arrow.Table(io_or_path)
+read_arrow(path) = read_arrow(Base.read(path))
+
+write_arrow(path::String, table; kwargs...) = Arrow.write(path, table; kwargs...)
+write_arrow(io::IO, table; kwargs...) = Arrow.write(io, table; file=get(kwargs, :file, true), kwargs...)
+write_arrow(path, table; kwargs...) = (io = IOBuffer(); write_arrow(io, table; kwargs...); write_full_path(path, take!(io)))
+
 #####
 ##### `extract_legolas_schema`
 #####
@@ -29,7 +136,8 @@ end
 
 Attempt to extract Arrow metadata from `table` via `Arrow.getmetadata(table)`.
 
-If Arrow metadata is present and contains `\"$LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY\" => s`, return [`Legolas.Schema(s)`](@ref).
+If Arrow metadata is present and contains `\"$LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY\" => s`,
+return `first(parse_schema_identifier(s))`
 
 Otherwise, return `nothing`.
 """
@@ -37,14 +145,14 @@ function extract_legolas_schema(table)
     metadata = Arrow.getmetadata(table)
     if !isnothing(metadata)
         for (k, v) in metadata
-            k == LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY && return Schema(v)
+            k == LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY && return first(parse_schema_identifier(v))
         end
     end
     return nothing
 end
 
 #####
-##### read/write tables
+##### `read`/`write`
 #####
 
 """
@@ -140,112 +248,3 @@ function tobuffer(args...; kwargs...)
     return io
 end
 
-#####
-##### read/write Arrow content to generic path types
-#####
-# It would be better if Arrow.jl supported a generic API for nonstandard path-like types so that
-# we can avoid potential intermediate copies here, but its documentation is explicit that it only
-# supports `Union{IO,String}`.
-#
-# TODO: upstream improvements to Arrow.jl to obviate these?
-
-write_full_path(path::AbstractString, bytes) = (mkpath(dirname(path)); Base.write(path, bytes))
-write_full_path(path, bytes) = Base.write(path, bytes)
-
-read_arrow(io_or_path::Union{IO,String,Vector{UInt8}}) = Arrow.Table(io_or_path)
-read_arrow(path) = read_arrow(Base.read(path))
-
-write_arrow(path::String, table; kwargs...) = Arrow.write(path, table; kwargs...)
-write_arrow(io::IO, table; kwargs...) = Arrow.write(io, table; file=get(kwargs, :file, true), kwargs...)
-write_arrow(path, table; kwargs...) = (io = IOBuffer(); write_arrow(io, table; kwargs...); write_full_path(path, take!(io)))
-
-#####
-##### Tables.jl operations
-#####
-
-"""
-    locations(collections::Tuple)
-
-Return a `Dict` whose keys are the set of all elements across all provided collections,
-and whose values are the indices that locate each corresponding element across all
-provided collecitons.
-
-Specifically, `locations(collections)[k][i]` will return a `Vector{Int}` whose elements
-are the index locations of `k` in `collections[i]`. If `!(k in collections[i])`, this
-`Vector{Int}` will be empty.
-
-For example:
-
-```
-julia> Legolas.locations((['a', 'b', 'c', 'f', 'b'],
-                          ['d', 'c', 'e', 'b'],
-                          ['f', 'a', 'f']))
-Dict{Char, Tuple{Vector{Int64}, Vector{Int64}, Vector{Int64}}} with 6 entries:
-  'f' => ([4], [], [1, 3])
-  'a' => ([1], [], [2])
-  'c' => ([3], [2], [])
-  'd' => ([], [1], [])
-  'e' => ([], [3], [])
-  'b' => ([2, 5], [4], [])
-```
-
-This function is useful as a building block for higher-level tabular operations
-that require indexing/grouping along specific sets of elements.
-"""
-function locations(collections::T) where {T<:Tuple}
-    N = fieldcount(T)
-    K = promote_type(eltype.(collections)...)
-    results = Dict{K,NTuple{N,Vector{Int}}}()
-    for (c, collection) in enumerate(collections)
-        for (i, item) in enumerate(collection)
-            push!(get!(() -> ntuple(_ -> Int[], N), results, item)[c], i)
-        end
-    end
-    return results
-end
-
-function _iterator_for_column(table, c)
-    Tables.columnaccess(table) && return Tables.getcolumn(_columns(table), c)
-    # there's not really a need to actually materialize this iterable
-    # for the caller, but doing so allows the caller to more usefully
-    # employ `eltype` on this function's output (since e.g. a generator
-    # would just return `Any` for the eltype)
-    return [Tables.getcolumn(r, c) for r in Tables.rows(table)]
-end
-
-"""
-    gather(column_name, tables...; extract=((table, idxs) -> view(table, idxs, :)))
-
-Gather rows from `tables` into a unified cross-table index along `column_name`. Returns
-a `Dict` whose keys are the unique values of `column_name` across `tables`, and whose
-values are tuples of the form:
-
-    (rows_matching_key_in_table_1, rows_matching_key_in_table_2, ...)
-
-The provided `extract` function is used to extract rows from each table; it takes
-as input a table and a `Vector{Int}` of row indices, and returns the corresponding
-subtable. The default definition is sufficient for `DataFrames` tables.
-
-Note that this function may internally call `Tables.columns` on each input table, so
-it may be slower and/or require more memory if `any(!Tables.columnaccess, tables)`.
-
-Note that we intend to eventually migrate this function from Legolas.jl to a more appropriate package.
-"""
-function gather(column_name, tables::Vararg{Any,N};
-                extract=((cols, idxs) -> view(cols, idxs, :))) where {N}
-    iters = ntuple(i -> _iterator_for_column(tables[i], column_name), N)
-    return Dict(id => ntuple(i -> extract(tables[i], locs[i]), N) for (id, locs) in locations(iters))
-end
-
-"""
-    materialize(table)
-
-Return a fully deserialized copy of `table`.
-
-This function is useful when `table` has built-in deserialize-on-access or
-conversion-on-access behavior (like `Arrow.Table`) and you'd like to pay
-such access costs upfront before repeatedly accessing the table.
-
-Note that we intend to eventually migrate this function from Legolas.jl to a more appropriate package.
-"""
-materialize(table) = map(collect, Tables.columntable(table))

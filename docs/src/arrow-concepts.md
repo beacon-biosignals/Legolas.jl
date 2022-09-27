@@ -16,5 +16,4 @@ If present, the `legolas_schema_qualified` field's value must be a [fully qualif
 
 ## Arrow File Naming Conventions
 
-When writing a Legolas-discoverable Arrow table to a file, prefer using the file extension `*.<unqualified schema name>.arrow`. For example, if the file's table's Legolas schema is `baz.supercar@1>bar.automobile@1`,
-use the file extension `*.baz.supercar.arrow`.
+When writing a Legolas-discoverable Arrow table to a file, prefer using the file extension `*.<unqualified schema name>.arrow`. For example, if the file's table's Legolas schema is `baz.supercar@1>bar.automobile@1`, use the file extension `*.baz.supercar.arrow`.

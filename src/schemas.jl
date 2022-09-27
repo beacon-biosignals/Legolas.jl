@@ -55,21 +55,21 @@ TODO
 
 """
 function parse_schema_identifier(x::AbstractString)
-    schema_names_versions = [split(y, '@') for y in split(x, '>')]
+    name_and_version_per_schema = [split(strip(y), '@') for y in split(x, '>')]
     schemas = Schema[]
-    invalid = isempty(schema_names_versions)
+    invalid = isempty(name_and_version_per_schema)
     if !invalid
-        for s in schema_names_versions
-            if length(s) != 2
+        for nv in name_and_version_per_schema
+            if length(nv) != 2
                 invalid = true
                 break
             end
-            name, version = s
+            name, version = nv
             version = tryparse(Int, version)
             version isa Int && push!(schemas, Schema(name, version))
         end
     end
-    invalid && throw(ArgumentError("failed to parse seemingly invalid schema identifier string: \"$x\""))
+    invalid && throw(ArgumentError("failed to parse seemingly invalid/malformed schema identifier string: \"$x\""))
     return schemas
 end
 
@@ -88,7 +88,7 @@ Define a convenience type alias of the form:
 especially the inclusion of the schema version integer `v` in every direct invocation.
 """
 macro alias(schema_name, T)
-    schema_name isa String || throw(ArgumentError("`schema_name` must be a `String`"))
+    schema_name isa String || throw(ArgumentError("`schema_name` provided to `@alias` must be a string literal"))
     occursin('@', schema_name) && throw(ArgumentError("`schema_name` provided to `@alias` should not include an `@` version clause"))
     is_valid_schema_name(schema_name) || throw(ArgumentError("`schema_name` provided to `@alias` is not a valid `Legolas.Schema` name: \"$name\""))
     version_symbol = esc(:v)
@@ -272,10 +272,11 @@ function Base.showerror(io::IO, e::SchemaDeclarationError)
               Note that valid `@schema` declarations meet these expecations:
 
               - `@schema`'s first argument must be of the form `\"name@X\"` or
-              "`\"name@X\" > \"parent@Y\"`, where `name` and `parent` are valid
+              "`\"name@X > parent@Y\"`, where `name` and `parent` are valid
               "Legolas schema names.
 
-              - `@schema` declarations must list at least one required field.
+              - `@schema` declarations must list at least one required field,
+              and must not list duplicate fields within the same declaration.
               """)
 end
 
@@ -346,24 +347,25 @@ end
 # site.
 
 macro schema(id, field_exprs...)
-    isempty(field_exprs) && return :(throw(SchemaDeclarationError("no required fields declared")))
-    schemas = parse_schema_identifier(id)
-    length()
-
-    schema, parent = nothing, nothing
+    id isa String || return :(throw(SchemaDeclarationError("schema identifier must be a string literal")))
+    schemas = nothing
     try
-        schema, parent = _parse_schema_expr(schema_expr)
+        schemas = parse_schema_identifier(id)
     catch err
-        msg = "Error encountered attempting to parse first argument provided to `@schema`.\n" *
-              "Received: $schema_expr\n" *
+        msg = "Error encountered attempting to parse schema identifier.\n" *
+              "Received: \"$id\"\n" *
               "Encountered: " * sprint(showerror, err)
         return :(throw(SchemaDeclarationError($msg)))
     end
-    if isnothing(schema)
-        msg = "first argument to `@schema` is invalid/malformed: $schema_expr"
-        return :(throw(SchemaDeclarationError($msg)))
+    if length(schemas) == 1
+        schema, parent = first(schemas), nothing
+    elseif length(schemas) == 2
+        schema, parent = schemas[1], schemas[2]
+    else
+        return :(throw(SchemaDeclarationError("schema identifier should specify at most one parent, found multiple: $schemas")))
     end
 
+    isempty(field_exprs) && return :(throw(SchemaDeclarationError("no required fields declared")))
     fields = [(name=stmt.args[1].args[1], type=stmt.args[1].args[2], statement=stmt)
               for stmt in map(_normalize_field, field_exprs)]
     allunique(f.name for f in fields) || return :(throw(SchemaDeclarationError("duplicate field names in declarations TODO")))

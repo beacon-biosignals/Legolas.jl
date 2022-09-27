@@ -18,6 +18,9 @@ Legolas.schema_name
 Legolas.schema_version
 Legolas.schema_identifier
 Legolas.schema_parent
+Legolas.schema_fields
+Legolas.schema_declaration
+Legolas.parse_schema_identifier
 Legolas.row
 ```
 
@@ -25,7 +28,6 @@ Legolas.row
 
 ```@docs
 Legolas.extract_legolas_schema
-Legolas.validate
 Legolas.write
 Legolas.read
 ```
@@ -35,6 +37,7 @@ Legolas.read
 ```@docs
 Legolas.lift
 Legolas.construct
+Legolas.guess_schema
 Legolas.assign_to_table_metadata!
 Legolas.gather
 Legolas.locations
