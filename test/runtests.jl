@@ -229,10 +229,10 @@ end
 @schema("my-inner-schema@1", b::Int=1)
 @schema("my-outer-schema@1",
         a::String,
-        x::MyInnerRow=MyInnerRow(x))
+        x::NamedTuple=Legolas.row(Legolas.Schema("my-inner-schema@1"), x))
 
 @testset "Nested arrow serialization" begin
-    table = [MyOuterRow(; a="outer_a", x=MyInnerRow())]
+    table = [(; a="outer_a", x=(; b=1))]
     roundtripped_table = Legolas.read(Legolas.tobuffer(table, Legolas.Schema("my-outer-schema@1")))
-    @test table == MyOuterRow.(Tables.rows(roundtripped_table))
+    @test table == (r -> Legolas.row(Legolas.Schema("my-outer-schema@1"), r)).(Tables.rows(roundtripped_table))
 end

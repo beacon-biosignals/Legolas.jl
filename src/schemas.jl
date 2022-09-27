@@ -20,11 +20,11 @@ is_valid_schema_name(x::AbstractString) = all(i -> i in ALLOWED_SCHEMA_NAME_CHAR
 """
     Legolas.Schema{name,version}
 
-A type representing the schema of a [`Legolas.Row`](@ref). The `name` (a `Symbol`) and `version` (an `Integer`)
+A type representing a Legolas schema. The `name` (a `Symbol`) and `version` (an `Integer`)
 are surfaced as type parameters, allowing them to be utilized for dispatch.
 
-For more details and examples, please see `Legolas.jl/examples/tour.jl` and the "Tips for Schema Authors"
-section of the Legolas.jl documentation.
+For more details and examples, please see `Legolas.jl/examples/tour.jl` and the
+"Schema-Related Concepts/Conventions" section of the Legolas.jl documentation.
 
 See also: [`schema_name`](@ref), [`schema_version`](@ref), [`schema_parent`](@ref)
 """
@@ -107,7 +107,7 @@ function Base.showerror(io::IO, e::UnknownSchemaError)
 end
 
 #####
-##### `Schema` property accessors/generators
+##### `Schema` accessors/generators
 #####
 
 """
@@ -132,9 +132,12 @@ Return the `Legolas.Schema` instance that corresponds to the parent of the given
 @inline schema_parent(::Schema) = nothing
 
 """
-    TODO
+    schema_declared(schema::Legolas.Schema{name,version})
+
+Return `true` if the schema `name@version` has been declared via `@schema` in the current Julia
+session; return `false` otherwise.
 """
-@inline schema_registered(::Schema) = false
+@inline schema_declared(::Schema) = false
 
 """
     schema_qualified_string(::Legolas.Schema)
@@ -146,14 +149,21 @@ metadata for table written via [`Legolas.write`](@ref).
 schema_qualified_string(schema::Schema) = throw(UnknownSchemaError(schema))
 
 """
-TODO
+    schema_fields(schema::Legolas.Schema)
 
-- returns NamedTuple of DataTypes
+Return a `NamedTuple{...,Tuple{Vararg{DataType}}` whose fields take the form:
+
+    <name of field required by schema> = <field's type>
+
+The returned fields include those inherited from `schema_parent(schema)` (if
+`schema` has a parent).
 """
 schema_fields(schema::Schema) = throw(UnknownSchemaError(schema))
 
 """
-TODO
+    schema_declaration(schema::Legolas.Schema)
+
+Return
 
 - returns a `Pair{String,Dict{Symbol,Expr}}` containing each required field statement for interactive discovery usage (NOT including parent fields)
 - does NOT include parent fields
@@ -165,7 +175,6 @@ schema_declaration(schema::Schema) = throw(UnknownSchemaError(schema))
 ##### `Schema` printing
 #####
 
-# TODO this should be compact version; full version should print `schema_field_statements`
 Base.show(io::IO, schema::Schema) = print(io, "Schema(\"$(schema_name(schema))@$(schema_version(schema))\")")
 
 #####
@@ -267,7 +276,7 @@ end
 _validate_wrt_parent(child_fields::NamedTuple, parent::Nothing) = nothing
 
 function _validate_wrt_parent(child_fields::NamedTuple, parent::Schema)
-    schema_registered(parent) || throw(SchemaDeclarationError("parent not registered TODO"))
+    schema_declared(parent) || throw(SchemaDeclarationError("parent not registered TODO"))
     _has_valid_child_field_types(child_fields, schema_fields(parent)) || throw(SchemaDeclarationError("bad field types TODO"))
     return nothing
 end
@@ -321,7 +330,7 @@ macro schema(schema_expr, field_exprs...)
     parent_find_violation_invocation = nothing
     if !isnothing(parent)
         qualified_string = :(string($qualified_string, '>', Legolas.schema_qualified_string($quoted_parent)))
-        declared_string = string(qualified_string, '>', schema_name(parent), '@', schema_version(parent))
+        declared_string = string(declared_string, '>', schema_name(parent), '@', schema_version(parent))
         total_schema_fields = :(merge(Legolas.schema_fields($quoted_parent), $total_schema_fields))
         parent_row_invocation = :(fields = Legolas.row($quoted_parent; fields...))
         parent_find_violation_invocation = quote
@@ -339,12 +348,12 @@ macro schema(schema_expr, field_exprs...)
         end
     end
     return quote
-        if Legolas.schema_registered($quoted_schema) && Legolas.schema_declaration($quoted_schema) != $quoted_schema_declaration
+        if Legolas.schema_declared($quoted_schema) && Legolas.schema_declaration($quoted_schema) != $quoted_schema_declaration
             throw(SchemaDeclarationError("invalid schema redefinition TODO"))
         else
             Legolas._validate_wrt_parent($field_names_types, $quoted_parent)
 
-            @inline Legolas.schema_registered(::$quoted_schema_type) = true
+            @inline Legolas.schema_declared(::$quoted_schema_type) = true
 
             @inline Legolas.schema_qualified_string(::$quoted_schema_type) = $qualified_string
 
