@@ -207,7 +207,7 @@ function validate(tables_schema::Tables.Schema, legolas_schema::Schema)
     result = find_violation(tables_schema, legolas_schema)
     isnothing(result) && return nothing
     field, violation = result
-    ismissing(violation) || throw(ArgumentError("could not find expected field `$field` in $tables_schema"))
+    ismissing(violation) && throw(ArgumentError("could not find expected field `$field` in $tables_schema"))
     expected = getfield(schema_fields(legolas_schema), field)
     throw(ArgumentError("field `$field` has unexpected type; expected <:$expected, found $violation"))
 end

@@ -131,7 +131,7 @@ end
     Legolas.Arrow.getmetadata(foo::Foo) = foo.meta
     foo = Foo(Dict("a" => "b", "b" => "b",
                    Legolas.LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY => "baz@1"))
-    @test Legolas.Schema("baz", 1) == Legolas.extract_schema(foo)
+    @test Legolas.Schema("baz", 1) == Legolas.extract_legolas_schema(foo)
 
     t = [(a="a", c=1, b="b"), Baz(a=1, b=2)] # not a valid Tables.jl table
     @test_throws ErrorException Legolas.validate(t, Schema("baz", 1))

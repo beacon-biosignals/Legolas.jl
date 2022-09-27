@@ -1,3 +1,7 @@
+#####
+##### `guess_schema`
+#####
+
 function _columns(table)
     try
         return Tables.columns(table)
@@ -7,12 +11,21 @@ function _columns(table)
     end
 end
 
+"""
+    TODO
+"""
+function guess_schema(table)
+    columns = _columns(table)
+    Tables.rowcount(columns) > 0 || return nothing
+    return Tables.schema(columns)
+end
+
 #####
-##### validate tables
+##### `extract_legolas_schema`
 #####
 
 """
-    Legolas.extract_schema(table)
+    Legolas.extract_legolas_schema(table)
 
 Attempt to extract Arrow metadata from `table` via `Arrow.getmetadata(table)`.
 
@@ -20,7 +33,7 @@ If Arrow metadata is present and contains `\"$LEGOLAS_SCHEMA_QUALIFIED_METADATA_
 
 Otherwise, return `nothing`.
 """
-function extract_schema(table)
+function extract_legolas_schema(table)
     metadata = Arrow.getmetadata(table)
     if !isnothing(metadata)
         for (k, v) in metadata
@@ -28,47 +41,6 @@ function extract_schema(table)
         end
     end
     return nothing
-end
-
-"""
-    Legolas.validate(table, legolas_schema::Legolas.Schema)
-
-Attempt to determine `s::Tables.Schema` from `table` and return `Legolas.validate(s, legolas_schema)`.
-
-If a `Tables.Schema` cannot be determined, a warning message is logged and `nothing` is returned.
-"""
-function validate(table, legolas_schema::Schema)
-    columns = _columns(table)
-    Tables.rowcount(columns) > 0 || return nothing
-    tables_schema = Tables.schema(columns)
-    if tables_schema isa Tables.Schema
-        try
-            validate(tables_schema, legolas_schema)
-        catch
-            @warn "provided table's `Tables.Schema` does not appear to match provided `Legolas.Schema`. Run `[Legolas.Row($legolas_schema, r) for r in Tables.rows(t)]` to try converting the table `t` to a compatible representation."
-            rethrow()
-        end
-    else
-        @warn "could not determine `Tables.Schema` from provided table; skipping schema validation"
-    end
-    return nothing
-end
-
-"""
-    Legolas.validate(table)
-
-If [`Legolas.extract_schema(table)`](@ref) returns a valid `Legolas.Schema`, return `Legolas.validate(table, Legolas.extract_schema(table))`.
-
-Otherwise, if a `Legolas.Schema` isn't found or is invalid, an `ArgumentError` is thrown.
-"""
-function validate(table)
-    schema = Legolas.extract_schema(table)
-    isnothing(schema) && throw(ArgumentError("""
-                                             could not extract valid `Legolas.Schema` from provided Arrow table;
-                                             is it missing the expected custom metadata and/or the expected
-                                             \"$LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY\" field?
-                                             """))
-    return validate(table, schema)
 end
 
 #####
@@ -80,13 +52,33 @@ end
 
 Read and return an `Arrow.Table` from `io_or_path`.
 
-If `validate` is `true`, `Legolas.validate` will be called on the table before it is returned.
+If `validate` is `true`, `Legolas.read` will attempt to extract a `Legolas.Schema` from
+the deserialized `Arrow.Table`'s metadata and use `Legolas.validate` to verify that the
+table's `Table.Schema` complies with the extracted `Legolas.Schema` before returning the
+table.
 
 Note that `io_or_path` may be any type that supports `Base.read(io_or_path)::Vector{UInt8}`.
 """
 function read(io_or_path; validate::Bool=true)
     table = read_arrow(io_or_path)
-    validate && Legolas.validate(table)
+    if validate
+        legolas_schema = extract_legolas_schema(table)
+        isnothing(legolas_schema) && throw(ArgumentError("""
+                                                         could not extract valid `Legolas.Schema` from the `Arrow.Table` read
+                                                         via `Legolas.read`; is it missing the expected custom metadata and/or
+                                                         the expected \"$LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY\" field?
+                                                         """))
+        try
+            Legolas.validate(guess_schema(table), legolas_schema)
+        catch
+            @warn """
+                  The `Tables.Schema` of the `Arrow.Table` read via `Legolas.read(io_or_path)` does not appear to
+                  comply with the `Legolas.Schema` indicated by the table's metadata ($legolas_schema).
+                  Try invoking `Legolas.read(io_or_path; validate=false)` to inspect the table.
+                  """
+            rethrow()
+        end
+    end
     return table
 end
 
@@ -104,7 +96,24 @@ Note that `io_or_path` may be any type that supports `Base.write(io_or_path, byt
 """
 function write(io_or_path, table, schema::Schema; validate::Bool=true,
                metadata=Arrow.getmetadata(table), kwargs...)
-    validate && Legolas.validate(table, schema)
+    if validate
+        table_schema = guess_schema(table)
+        if table_schema isa Tables.Schema
+            try
+                Legolas.validate(table_schema, schema)
+            catch
+                @warn """
+                      The table provided to `Legolas.write` does not appear to comply with the provided `Legolas.Schema`
+                      according to `Legolas.validate`. You may attempt to construct a schema-compliant table by executing
+                      `[Legolas.row($legolas_schema, r) for r in Tables.rows(table)]`, or disable validation-on-write
+                      by passing `validate=false` to `Legolas.write`.
+                      """
+                rethrow()
+            end
+        else
+            @warn "could not determine `Tables.Schema` from table provided to `Legolas.write`; skipping schema validation"
+        end
+    end
     schema_metadata = LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY => schema_qualified_string(schema)
     if isnothing(metadata)
         metadata = (schema_metadata,)

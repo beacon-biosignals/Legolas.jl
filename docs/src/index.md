@@ -1,6 +1,8 @@
 # API Documentation
 
-If you're a newcomer to Legolas.jl, please familiarize yourself with via the [tour](https://github.com/beacon-biosignals/Legolas.jl/blob/master/examples/tour.jl) before diving into this documentation.
+!!! note
+
+    If you're a newcomer to Legolas.jl, please familiarize yourself with the [tour](https://github.com/beacon-biosignals/Legolas.jl/blob/main/examples/tour.jl) before diving into this documentation.
 
 ```@meta
 CurrentModule = Legolas
@@ -22,7 +24,7 @@ Legolas.row
 ## Validating/Writing/Reading Legolas Tables
 
 ```@docs
-Legolas.extract_schema
+Legolas.extract_legolas_schema
 Legolas.validate
 Legolas.write
 Legolas.read
