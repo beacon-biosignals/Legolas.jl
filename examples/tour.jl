@@ -281,7 +281,7 @@ table = [invalid[1], Tables.rowmerge(baz; k=123), invalid[3]]
 #   it is actually written out. Note that this can be disabled by passing `validate=false` to `Legolas.write`.
 #
 # - `Legolas.write` ensures that the written-out Arrow table's metadata contains a `"legolas_schema_qualified"`
-#   key whose value is `Legolas.schema_qualified_string(schema)`. This field enables consumers of the table to
+#   key whose value is `Legolas.schema_identifier(schema)`. This field enables consumers of the table to
 #   perform automated (or manual) schema discovery/evolution/validation.
 table_isequal(a, b) = isequal(Legolas.materialize(a), Legolas.materialize(b))
 
@@ -301,7 +301,7 @@ msg = """
       the expected \"legolas_schema_qualified\" field?
       """
 @test_throws ArgumentError(msg) Legolas.read(Arrow.tobuffer(table))
-invalid_but_has_schema_metadata = Arrow.tobuffer(invalid; metadata=("legolas_schema_qualified" => Legolas.schema_qualified_string(Baz{1}()),))
+invalid_but_has_schema_metadata = Arrow.tobuffer(invalid; metadata=("legolas_schema_qualified" => Legolas.schema_identifier(Baz{1}()),))
 @test_throws ArgumentError("field `k` has unexpected type; expected <:Int64, found Union{Missing, Int64, String}") Legolas.read(invalid_but_has_schema_metadata)
 
 # A note about one additional benefit of `Legolas.read`/`Legolas.write`: Unlike their Arrow.jl counterparts,

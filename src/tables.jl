@@ -114,7 +114,7 @@ function write(io_or_path, table, schema::Schema; validate::Bool=true,
             @warn "could not determine `Tables.Schema` from table provided to `Legolas.write`; skipping schema validation"
         end
     end
-    schema_metadata = LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY => schema_qualified_string(schema)
+    schema_metadata = LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY => schema_identifier(schema)
     if isnothing(metadata)
         metadata = (schema_metadata,)
     else

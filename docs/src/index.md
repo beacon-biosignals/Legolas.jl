@@ -16,7 +16,7 @@ Legolas.Schema
 Legolas.is_valid_schema_name
 Legolas.schema_name
 Legolas.schema_version
-Legolas.schema_qualified_string
+Legolas.schema_identifier
 Legolas.schema_parent
 Legolas.row
 ```

@@ -1,5 +1,5 @@
 #####
-##### schema name validation
+##### schema name/identifier parsing/validation
 #####
 
 const ALLOWED_SCHEMA_NAME_CHARACTERS = Char['-', '.', 'a':'z'..., '0':'9'...]
@@ -41,40 +41,63 @@ not a valid schema name.
 Prefer using this constructor over `Legolas.Schema{Symbol(name),version}()` directly.
 """
 function Schema(name::AbstractString, version::Integer)
-    version >= 0 || throw(ArgumentError("`Legolas.Schema` version must be non-negative, recieved: $version"))
     is_valid_schema_name(name) || throw(ArgumentError("argument is not a valid `Legolas.Schema` name: \"$name\""))
+    version >= 0 || throw(ArgumentError("`Legolas.Schema` version must be non-negative, received: $version"))
     return Schema{Symbol(name),version}()
 end
 
-"""
-    Legolas.Schema(s::AbstractString)
+#####
+##### `parse_schema_identifier`
+#####
 
-Return `Legolas.Schema(name, n)` where `s` is a valid schema identifier of the form `"name@n"`.
-
-`s` may also be a fully qualified schema identifier of the form `"name@n>...>..."`.
 """
-function Schema(s::AbstractString)
-    x = split(first(split(s, '>', limit=2)), '@')
-    if length(x) == 2
-        name, version = x
-        version = tryparse(Int, version)
-        version isa Int && return Schema(name, version)
+TODO
+
+"""
+function parse_schema_identifier(x::AbstractString)
+    schema_names_versions = [split(y, '@') for y in split(x, '>')]
+    schemas = Schema[]
+    invalid = isempty(schema_names_versions)
+    if !invalid
+        for s in schema_names_versions
+            if length(s) != 2
+                invalid = true
+                break
+            end
+            name, version = s
+            version = tryparse(Int, version)
+            version isa Int && push!(schemas, Schema(name, version))
+        end
     end
-    throw(ArgumentError("argument is not a valid `Legolas.Schema` string: \"$s\""))
+    invalid && throw(ArgumentError("failed to parse seemingly invalid schema identifier string: \"$x\""))
+    return schemas
 end
 
 #####
 ##### `@alias`
 #####
 
+"""
+    Legolas.@alias(schema_name, T)
+
+Define a convenience type alias of the form:
+
+    const T{v} = Legolas.Schema{Symbol(schema_name),v}
+
+...along with some default behaviors that encourage proper usage by downstream callers,
+especially the inclusion of the schema version integer `v` in every direct invocation.
+"""
 macro alias(schema_name, T)
     schema_name isa String || throw(ArgumentError("`schema_name` must be a `String`"))
     occursin('@', schema_name) && throw(ArgumentError("`schema_name` provided to `@alias` should not include an `@` version clause"))
-    is_valid_schema_name(schema_name) || throw(ArgumentError("provided `schema_name` is not a valid `Legolas.Schema` name: \"$name\""))
+    is_valid_schema_name(schema_name) || throw(ArgumentError("`schema_name` provided to `@alias` is not a valid `Legolas.Schema` name: \"$name\""))
     version_symbol = esc(:v)
+    quoted_T = Base.Meta.quot(T)
+    T = esc(T)
     return quote
-        const $(esc(T)){$version_symbol} = Legolas.Schema{Symbol($schema_name),$version_symbol}
-        $(esc(T))() = error("TODO")
+        const $T{$version_symbol} = Legolas.Schema{Symbol($schema_name),$version_symbol}
+        $T() = error("invocations of `", $quoted_T, "` must specify a schema version integer; instead of `", $quoted_T,
+                     "()`, try `", $quoted_T, "{v}()` where `v` is an appropriate schema version integer")
     end
 end
 
@@ -88,7 +111,7 @@ end
 
 function Base.showerror(io::IO, e::UnknownSchemaError)
     print(io, """
-              encountered unknown `Legolas.Schema` type: $(e.schema)
+              UnknownSchemaError: encountered unknown `Legolas.Schema` type: $(e.schema)
 
               This generally indicates that this schema has not been declared (i.e.
               the schema's corresponding `@schema` statement has not been executed) in
@@ -140,13 +163,13 @@ session; return `false` otherwise.
 @inline schema_declared(::Schema) = false
 
 """
-    schema_qualified_string(::Legolas.Schema)
+    schema_identifier(::Legolas.Schema)
 
-Return this `Legolas.Schema`'s fully qualified schema identifier string. This string is
-serialized as the `\"$LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY\"` field value in table
-metadata for table written via [`Legolas.write`](@ref).
+Return this `Legolas.Schema`'s fully qualified schema identifier. This string is serialized
+as the `\"$LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY\"` field value in table metadata for table
+written via [`Legolas.write`](@ref).
 """
-schema_qualified_string(schema::Schema) = throw(UnknownSchemaError(schema))
+schema_identifier(schema::Schema) = throw(UnknownSchemaError(schema))
 
 """
     schema_fields(schema::Legolas.Schema)
@@ -185,7 +208,7 @@ Base.show(io::IO, schema::Schema) = print(io, "Schema(\"$(schema_name(schema))@$
 const LEGOLAS_SCHEMA_ARROW_NAME = Symbol("JuliaLang.Legolas.Schema")
 Arrow.ArrowTypes.arrowname(::Type{<:Schema}) = LEGOLAS_SCHEMA_ARROW_NAME
 Arrow.ArrowTypes.ArrowType(::Type{<:Schema}) = String
-Arrow.ArrowTypes.toarrow(schema::Schema) = schema_qualified_string(schema)
+Arrow.ArrowTypes.toarrow(schema::Schema) = schema_identifier(schema)
 Arrow.ArrowTypes.JuliaType(::Val{LEGOLAS_SCHEMA_ARROW_NAME}, ::Any) = Schema
 Arrow.ArrowTypes.fromarrow(::Type{<:Schema}, qualified_string) = Schema(qualified_string)
 
@@ -242,18 +265,30 @@ struct SchemaDeclarationError <: Exception
     message::String
 end
 
-Base.showerror(io::IO, e::SchemaDeclarationError) = print(io, e.message)
+function Base.showerror(io::IO, e::SchemaDeclarationError)
+    print(io, """
+              SchemaDeclarationError: $(e.message)
 
-function _parse_schema_expr(x)
-    if x isa Expr && x.head == :call && x.args[1] == :> && length(x.args) == 3
-        child, _ = _parse_schema_expr(x.args[2])
-        parent, _ = _parse_schema_expr(x.args[3])
-        return child, parent
-    end
-    return nothing, nothing
+              Note that valid `@schema` declarations meet these expecations:
+
+              - `@schema`'s first argument must be of the form `\"name@X\"` or
+              "`\"name@X\" > \"parent@Y\"`, where `name` and `parent` are valid
+              "Legolas schema names.
+
+              - `@schema` declarations must list at least one required field.
+              """)
 end
 
-_parse_schema_expr(str::AbstractString) = Schema(str), nothing
+# function _parse_schema_expr(x)
+#     if x isa Expr && x.head == :call && x.args[1] == :> && length(x.args) == 3
+#         child, _ = _parse_schema_expr(x.args[2])
+#         parent, _ = _parse_schema_expr(x.args[3])
+#         return child, parent
+#     end
+#     return nothing, nothing
+# end
+
+# _parse_schema_expr(str::AbstractString) = Schema(str), nothing
 
 function _normalize_field(f)
     original_f = f
@@ -310,13 +345,28 @@ end
 # from the parent's declaration site that are not available/valid at the child's declaration
 # site.
 
-macro schema(schema_expr, field_exprs...)
-    schema, parent = _parse_schema_expr(schema_expr)
-    isnothing(schema) && throw(SchemaDeclarationError("`@schema`'s first argument must be of the form `\"name@X\"` or `\"name@X\" > \"parent@Y\"`. Received: $schema_expr"))
+macro schema(id, field_exprs...)
+    isempty(field_exprs) && return :(throw(SchemaDeclarationError("no required fields declared")))
+    schemas = parse_schema_identifier(id)
+    length()
+
+    schema, parent = nothing, nothing
+    try
+        schema, parent = _parse_schema_expr(schema_expr)
+    catch err
+        msg = "Error encountered attempting to parse first argument provided to `@schema`.\n" *
+              "Received: $schema_expr\n" *
+              "Encountered: " * sprint(showerror, err)
+        return :(throw(SchemaDeclarationError($msg)))
+    end
+    if isnothing(schema)
+        msg = "first argument to `@schema` is invalid/malformed: $schema_expr"
+        return :(throw(SchemaDeclarationError($msg)))
+    end
 
     fields = [(name=stmt.args[1].args[1], type=stmt.args[1].args[2], statement=stmt)
               for stmt in map(_normalize_field, field_exprs)]
-    allunique(f.name for f in fields) || throw(SchemaDeclarationError("duplicate field names in declarations TODO"))
+    allunique(f.name for f in fields) || return :(throw(SchemaDeclarationError("duplicate field names in declarations TODO")))
     field_names_types = Expr(:tuple, (:($(f.name) = $(f.type)) for f in fields)...)
 
     quoted_schema = Base.Meta.quot(schema)
@@ -329,7 +379,7 @@ macro schema(schema_expr, field_exprs...)
     parent_row_invocation = nothing
     parent_find_violation_invocation = nothing
     if !isnothing(parent)
-        qualified_string = :(string($qualified_string, '>', Legolas.schema_qualified_string($quoted_parent)))
+        qualified_string = :(string($qualified_string, '>', Legolas.schema_identifier($quoted_parent)))
         declared_string = string(declared_string, '>', schema_name(parent), '@', schema_version(parent))
         total_schema_fields = :(merge(Legolas.schema_fields($quoted_parent), $total_schema_fields))
         parent_row_invocation = :(fields = Legolas.row($quoted_parent; fields...))
@@ -349,13 +399,13 @@ macro schema(schema_expr, field_exprs...)
     end
     return quote
         if Legolas.schema_declared($quoted_schema) && Legolas.schema_declaration($quoted_schema) != $quoted_schema_declaration
-            throw(SchemaDeclarationError("invalid schema redefinition TODO"))
+            return :(throw(SchemaDeclarationError("invalid schema redefinition TODO")))
         else
             Legolas._validate_wrt_parent($field_names_types, $quoted_parent)
 
             @inline Legolas.schema_declared(::$quoted_schema_type) = true
 
-            @inline Legolas.schema_qualified_string(::$quoted_schema_type) = $qualified_string
+            @inline Legolas.schema_identifier(::$quoted_schema_type) = $qualified_string
 
             @inline Legolas.schema_parent(::$quoted_schema_type) = $quoted_parent
 
