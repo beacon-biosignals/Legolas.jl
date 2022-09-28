@@ -26,25 +26,37 @@ are surfaced as type parameters, allowing them to be utilized for dispatch.
 For more details and examples, please see `Legolas.jl/examples/tour.jl` and the
 "Schema-Related Concepts/Conventions" section of the Legolas.jl documentation.
 
+Throws an `ArgumentError` if `version` is not non-negative; prefer the constructor
+
+
+Schema(name, version)
+
+which performs additional validation on construction.
+
 See also: [`schema_name`](@ref), [`schema_version`](@ref), [`schema_parent`](@ref)
 """
-struct Schema{name,version} end
-
-Schema(schema::Schema) = schema
+struct Schema{name,version}
+    function Schema{name,version}() where {name,version}
+        version isa Integer && version >= 0 || throw(ArgumentError("`version` in `Schema{_,version}` must be a non-negative integer, received: $version"))
+        return new{name,version}()
+    end
+end
 
 """
     Legolas.Schema(name::AbstractString, version::Integer)
 
-Return `Legolas.Schema{Symbol(name),version}()`. This constructor will throw an `ArgumentError` if `name` is
-not a valid schema name.
+Return `Legolas.Schema{Symbol(name),version}()`.
+
+Throws an `ArgumentError` if `name` is not a valid schema name.
 
 Prefer using this constructor over `Legolas.Schema{Symbol(name),version}()` directly.
 """
 function Schema(name::AbstractString, version::Integer)
     is_valid_schema_name(name) || throw(ArgumentError("argument is not a valid `Legolas.Schema` name: \"$name\""))
-    version >= 0 || throw(ArgumentError("`Legolas.Schema` version must be non-negative, received: $version"))
     return Schema{Symbol(name),version}()
 end
+
+Schema(schema::Schema) = schema
 
 #####
 ##### `parse_schema_identifier`
@@ -91,13 +103,15 @@ macro alias(schema_name, T)
     schema_name isa String || throw(ArgumentError("`schema_name` provided to `@alias` must be a string literal"))
     occursin('@', schema_name) && throw(ArgumentError("`schema_name` provided to `@alias` should not include an `@` version clause"))
     is_valid_schema_name(schema_name) || throw(ArgumentError("`schema_name` provided to `@alias` is not a valid `Legolas.Schema` name: \"$name\""))
+    schema_symbol = Base.Meta.quot(Symbol(schema_name))
     version_symbol = esc(:v)
     quoted_T = Base.Meta.quot(T)
     T = esc(T)
     return quote
-        const $T{$version_symbol} = Legolas.Schema{Symbol($schema_name),$version_symbol}
+        const $T{$version_symbol} = Legolas.Schema{$schema_symbol,$version_symbol}
+        $T(v::Integer) = Legolas.Schema{$schema_symbol,v}()
         $T() = error("invocations of `", $quoted_T, "` must specify a schema version integer; instead of `", $quoted_T,
-                     "()`, try `", $quoted_T, "{v}()` where `v` is an appropriate schema version integer")
+                     "()`, try `", $quoted_T, "(v)` where `v` is an appropriate schema version integer")
     end
 end
 
@@ -198,7 +212,7 @@ schema_declaration(schema::Schema) = throw(UnknownSchemaError(schema))
 ##### `Schema` printing
 #####
 
-Base.show(io::IO, schema::Schema) = print(io, "Schema(\"$(schema_name(schema))@$(schema_version(schema))\")")
+Base.show(io::IO, schema::Schema) = print(io, "Schema(\"$(schema_name(schema))\", $(schema_version(schema)))")
 
 #####
 ##### `Schema` Arrow (de)serialization

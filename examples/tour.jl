@@ -35,7 +35,7 @@ using Legolas: @schema, Schema, @alias, complies_with, find_violation, validate,
 # We can use `@alias` to declare a type alias `Foo{v}` that can be used to more succinctly refer
 # to `Schema{Symbol("example.foo"),1}` and construct instances of the `example.foo@1` schema:
 @alias("example.foo", Foo)
-@test Foo{1}() == Schema("example.foo", 1)
+@test Foo(1) == Schema("example.foo", 1)
 
 #####
 ##### Schema Compliance/Validation
@@ -52,28 +52,28 @@ for s in [Tables.Schema((:a, :b, :c, :d), (Real, String, Any, AbstractVector)), 
           Tables.Schema((:a, :b, :d), (Int, String, Vector)),                   # Fields whose declared type constraints are `>:Missing` may be elided entirely.
           Tables.Schema((:a, :x, :b, :y, :d), (Int, Any, String, Any, Vector))] # Non-required fields may also be present.
     # if `complies_with` finds a violation, it returns `false`; returns `true` otherwise
-    @test complies_with(s, Foo{1}())
+    @test complies_with(s, Foo(1))
 
     # if `validate` finds a violation, it throws an error indicating the violation;
     # returns `nothing` otherwise
-    @test validate(s, Foo{1}()) isa Nothing
+    @test validate(s, Foo(1)) isa Nothing
 
     # if `find_violation` finds a violation, it returns a tuple indicating the relevant
     # field and its violation; returns `nothing` otherwise
-    @test isnothing(find_violation(s, Foo{1}()))
+    @test isnothing(find_violation(s, Foo(1)))
 end
 
 # ...while the below `Tables.Schema`s do not:
 
 s = Tables.Schema((:a, :c, :d), (Int, Float64, Vector)) # The required non-`>:Missing` field `b::String` is not present.
-@test !complies_with(s, Foo{1}())
-@test_throws ArgumentError validate(s, Foo{1}())
-@test isequal(find_violation(s, Foo{1}()), :b => missing)
+@test !complies_with(s, Foo(1))
+@test_throws ArgumentError validate(s, Foo(1))
+@test isequal(find_violation(s, Foo(1)), :b => missing)
 
 s = Tables.Schema((:a, :b, :c, :d), (Int, String, Float64, Any)) # The type of required field `d::AbstractVector` is not `<:AbstractVector`.
-@test !complies_with(s, Foo{1}())
-@test_throws ArgumentError validate(s, Foo{1}())
-@test isequal(find_violation(s, Foo{1}()), :d => Any)
+@test !complies_with(s, Foo(1))
+@test_throws ArgumentError validate(s, Foo(1))
+@test isequal(find_violation(s, Foo(1)), :d => Any)
 
 # The expectations that characterize Legolas' particular notion of "schematic compliance" - requiring the
 # presence of pre-specified declared fields, assuming non-present fields to be implicitly `missing`, and allowing
@@ -90,8 +90,8 @@ s = Tables.Schema((:a, :b, :c, :d), (Int, String, Float64, Any)) # The type of r
 # `Legolas.row` returns a "canonicalized" schema-compliant row value from a given set of fields,
 # provided as either keyword arguments or as an `Tables.AbstractRow`-compliant value:
 fields = (a=1.0, b="hi", c=π, d=[1, 2, 3])
-@test row(Foo{1}(); fields...) == fields
-@test row(Foo{1}(), fields) == fields
+@test row(Foo(1); fields...) == fields
+@test row(Foo(1), fields) == fields
 
 # This may seem like a fairly trivial function in the preceding example, but the `row` function has
 # some useful and convenient properties. Specifically, input fields provided to `row` may:
@@ -110,16 +110,16 @@ fields = (a=1.0, b="hi", c=π, d=[1, 2, 3])
 # Demonstrating a few of these properties:
 
 # Providing the additional non-required field `x` in the input, which is preserved in the output:
-@test row(Foo{1}(); fields..., x="x") == (; fields..., x="x")
+@test row(Foo(1); fields..., x="x") == (; fields..., x="x")
 
 # Eliding the required field `c`, which is assigned `missing` in the output:
-@test isequal(row(Foo{1}(); a=1.0, b="hi", d=[1, 2, 3]), (a=1.0, b="hi", c=missing, d=[1, 2, 3]))
+@test isequal(row(Foo(1); a=1.0, b="hi", d=[1, 2, 3]), (a=1.0, b="hi", c=missing, d=[1, 2, 3]))
 
 # Providing the non-compliantly-typed field `d::Int`, inducing a `MethodError`:
-@test_throws MethodError row(Foo{1}(); a=1.0, b="hi", d=2)
+@test_throws MethodError row(Foo(1); a=1.0, b="hi", d=2)
 
 # Implicitly providing the non-compliantly-typed field `d::Missing`, inducing a `MethodError`:
-@test_throws MethodError row(Foo{1}(); a=1.0, b="hi")
+@test_throws MethodError row(Foo(1); a=1.0, b="hi")
 
 #####
 ##### Custom Field Assignments
@@ -144,9 +144,9 @@ fields = (a=1.0, b="hi", c=π, d=[1, 2, 3])
 #   end
 #
 # ...such that invocations `row(::Bar{1}; ...)` have the following behavior:
-@test row(Bar{1}(); x=200, y=:hi) == (x=127, y="hi", z="hi_127")
-@test isequal(row(Bar{1}(); y=:hi), (x=missing, y="hi", z="hi_missing"))
-@test row(Bar{1}(); x=200, y=:hi, z="bye") == (x=127, y="hi", z="bye")
+@test row(Bar(1); x=200, y=:hi) == (x=127, y="hi", z="hi_127")
+@test isequal(row(Bar(1); y=:hi), (x=missing, y="hi", z="hi_missing"))
+@test row(Bar(1); x=200, y=:hi, z="bye") == (x=127, y="hi", z="bye")
 
 # Custom field assignments enable schema authors to enforce value-level constraints and to imbue
 # `row` with convenient per-field transformations/conversions so that it can accept a wider range
@@ -166,8 +166,8 @@ fields = (a=1.0, b="hi", c=π, d=[1, 2, 3])
 #
 # Let's check that `Bar{1}` meets these expectations:
 fields = (x=200, y=:hi)
-@test row(Bar{1}(), fields) == row(Bar{1}(), fields)
-@test row(Bar{1}(), row(Bar{1}(), fields)) == row(Bar{1}(), fields)
+@test row(Bar(1), fields) == row(Bar(1), fields)
+@test row(Bar(1), row(Bar(1), fields)) == row(Bar(1), fields)
 
 # For illustration's sake, here is an example of a pathological schema declaration that violates
 # both of these expectations:
@@ -179,10 +179,10 @@ const GLOBAL_STATE = Ref(0)
 @alias("example.bad", Bad)
 
 # Demonstration of non-idempotency, both in `x` and `y` fields:
-@test row(Bad{1}(), row(Bad{1}(), (x=1, y=1))) != row(Bad{1}(), (x=1, y=1))
+@test row(Bad(1), row(Bad(1), (x=1, y=1))) != row(Bad(1), (x=1, y=1))
 
 # Demonstration of side effects / reliance on non-local state in `y` field:
-@test row(Bad{1}(), (x=1, y=1)) != row(Bad{1}(), (x=1, y=1))
+@test row(Bad(1), (x=1, y=1)) != row(Bad(1), (x=1, y=1))
 
 #####
 ##### Extending Existing Schemas
@@ -204,8 +204,8 @@ const GLOBAL_STATE = Ref(0)
 # must comply with the parent schema, but the reverse need not be true. We can check schemas' required fields
 # and their type constraints via `Legolas.schema_fields`. Based on these outputs, it is a worthwhile exercise
 # to confirm for yourself that `Baz{1}` is a valid extension of `Bar{1}` under the aforementioned rule:
-@test Legolas.schema_fields(Bar{1}()) == (x=Union{Missing,Int8}, y=String, z=String)
-@test Legolas.schema_fields(Baz{1}()) == (x=Int8, y=String, z=String, k=Int64)
+@test Legolas.schema_fields(Bar(1)) == (x=Union{Missing,Int8}, y=String, z=String)
+@test Legolas.schema_fields(Baz(1)) == (x=Int8, y=String, z=String, k=Int64)
 
 # As a counterexample, the following is invalid, because the declaration of `x::Any` would allow for `x`
 # values that are disallowed by the parent schema `example.bar@1`:
@@ -214,13 +214,13 @@ const GLOBAL_STATE = Ref(0)
 # When `row` is evaluated against an extension schema, it will apply the parent schema's field
 # assignments before applying the child schema's field assignments. Notice how `row` applies the
 # constraints/transformations of the parent and child schemas in the below examples:
-@test row(Baz{1}(); x=200, y=:hi) == (x=127, z="hi_127", k=6, y="hi")
-@test_throws MethodError row(Baz{1}(); y=:hi) # `Baz{1}` does not allow `x::Missing`
+@test row(Baz(1); x=200, y=:hi) == (x=127, z="hi_127", k=6, y="hi")
+@test_throws MethodError row(Baz(1); y=:hi) # `Baz{1}` does not allow `x::Missing`
 
 # `Baz{1}`'s generated `row` method definition is thus roughly equivalent to:
 #
 #   function Legolas.row(::Baz{1}; fields...)
-#       fields = row(Bar{1}(), fields)
+#       fields = row(Bar(1), fields)
 #       return Legolas._row(Baz{1}; fields...)
 #   end
 #
@@ -252,7 +252,7 @@ const GLOBAL_STATE = Ref(0)
 
 # Legolas provides special methods for reading/writing/validating Arrow tables that utilize `Legolas.Schema`s. To
 # start exploring these methods, we'll first construct a dummy table using the previously defined `Baz{1}` schema:
-baz = row(Baz{1}(); x=200, y=:hi)
+baz = row(Baz(1); x=200, y=:hi)
 invalid = [baz,
            Tables.rowmerge(baz; k="violates `k::Int64`"),
            Tables.rowmerge(baz; z="some_other_value")]
@@ -261,13 +261,13 @@ invalid = [baz,
 # `find_violation` that we utilized earlier in the tour. Note our use of `Legolas.guess_schema`
 # here, which is similar to `Tables.schema` but does a little bit of extra work in order to try
 # to figure out the input's `Table.Schema` even if it's not evident from the table's type.
-@test find_violation(Legolas.guess_schema(invalid), Baz{1}()) == (:k => Any)
+@test find_violation(Legolas.guess_schema(invalid), Baz(1)) == (:k => Any)
 
 # Let's fix the violation:
 table = [invalid[1], Tables.rowmerge(baz; k=123), invalid[3]]
 
 # Much better:
-@test complies_with(Legolas.guess_schema(table), Baz{1}())
+@test complies_with(Legolas.guess_schema(table), Baz(1))
 
 # Legolas provides dedicated read/write functions that can perform similar schema validation while
 # (de)serializing tables to/from Arrow.
@@ -284,22 +284,22 @@ table = [invalid[1], Tables.rowmerge(baz; k=123), invalid[3]]
 table_isequal(a, b) = isequal(Legolas.materialize(a), Legolas.materialize(b))
 
 io = IOBuffer()
-Legolas.write(io, table, Baz{1}())
+Legolas.write(io, table, Baz(1))
 t = Arrow.Table(seekstart(io))
 @test Arrow.getmetadata(t) == Dict("legolas_schema_qualified" => "example.baz@1>example.bar@1")
 @test table_isequal(t, Arrow.Table(Arrow.tobuffer(table)))
-@test table_isequal(t, Arrow.Table(Legolas.tobuffer(table, Baz{1}()))) # `Legolas.tobuffer` is analogous to `Arrow.tobuffer`
+@test table_isequal(t, Arrow.Table(Legolas.tobuffer(table, Baz(1)))) # `Legolas.tobuffer` is analogous to `Arrow.tobuffer`
 
 # Similarly, Legolas provides `Legolas.read(path_or_io)`, which wraps `Arrow.Table(path_or_io)`
 # validates the deserialized `Arrow.Table` before returning it:
-@test table_isequal(Legolas.read(Legolas.tobuffer(table, Baz{1}())), t)
+@test table_isequal(Legolas.read(Legolas.tobuffer(table, Baz(1))), t)
 msg = """
       could not extract valid `Legolas.Schema` from the `Arrow.Table` read
       via `Legolas.read`; is it missing the expected custom metadata and/or
       the expected \"legolas_schema_qualified\" field?
       """
 @test_throws ArgumentError(msg) Legolas.read(Arrow.tobuffer(table))
-invalid_but_has_schema_metadata = Arrow.tobuffer(invalid; metadata=("legolas_schema_qualified" => Legolas.schema_identifier(Baz{1}()),))
+invalid_but_has_schema_metadata = Arrow.tobuffer(invalid; metadata=("legolas_schema_qualified" => Legolas.schema_identifier(Baz(1)),))
 @test_throws ArgumentError("field `k` has unexpected type; expected <:Int64, found Union{Missing, Int64, String}") Legolas.read(invalid_but_has_schema_metadata)
 
 # A note about one additional benefit of `Legolas.read`/`Legolas.write`: Unlike their Arrow.jl counterparts,

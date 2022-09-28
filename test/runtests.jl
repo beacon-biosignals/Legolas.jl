@@ -114,9 +114,10 @@ expected_bad_id_message(x) = "argument is not a valid `Legolas.Schema` identifie
 expected_bad_version_message(x) = "`Legolas.Schema` version must be non-negative, received: $x"
 
 function generate_test_schema_identifiers(good_names, bad_names)
-    # [(child schema identifier => full schema identifier), ...]
-    good_identifiers = Pair{String,String}[]
-    # [(bad string => expected `Schema` error message, bad expr => expected `@schema` error message)]
+    # [(schema identifier, expected schemas), ...]
+    good_identifiers = Pair{String,Vector{Schema}}[]
+    # [(schema identifier, expected error message), ...]
+
     bad_identifiers = Tuple{Pair{String,String},Pair{Expr,String}}[]
     for good in good_names
         push!(good_identifiers, "$good@1" => "$good@1")
@@ -144,7 +145,7 @@ function generate_test_schema_identifiers(good_names, bad_names)
     return good_identifiers, bad_identifiers
 end
 
-@testset "`Schema` Declaration/Instantiation" begin
+@testset "`Legolas.Schema`" begin
     good_schema_names = ("foo", "test.foo", "test.foo-bar", ".-technically-allowed-.")
     good_versions = (0, 1, 2, 3)
     bad_schema_names = ("has_underscore", "caPitaLs",  "has a space", "illegal?chars*")
