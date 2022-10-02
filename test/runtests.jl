@@ -119,7 +119,7 @@ function bad_schema_declaration_message(id, err)
            "Encountered: ArgumentError: " * err
 end
 
-@testset "Legolas.Schema + Legolas.parse_schema_identifier" begin
+@testset "Legolas.parse_schema_identifier and related code" begin
     good_schema_names = ("foo", "test.foo", "test.foo-bar", ".-technically-allowed-.")
     good_versions = (0, 1, 2, 3)
     bad_schema_names = ("has_underscore", "caPitaLs",  "has a space", "illegal?chars*")
@@ -128,6 +128,8 @@ end
     for n in good_schema_names, v in good_versions
         @test Legolas.parse_schema_identifier("$n@$v") == [Schema(n, v)]
         @test Schema(n, v) == Schema{Symbol(n),v}()
+        @test Legolas.schema_name(Schema(n, v)) == Symbol(n)
+        @test Legolas.schema_version(Schema(n, v)) == v
     end
 
     for n in good_schema_names, v in bad_versions
@@ -192,53 +194,119 @@ end
     @test_throws ArgumentError("`schema_name` provided to `@alias` is not a valid `Legolas.Schema` name: \"joe?\"") @alias("joe?", J)
 end
 
-@schema("test.parent@1", x, y::AbstractString)
+@schema("test.parent@1", x::Vector, y::AbstractString)
 @alias("test.parent", Parent)
 @schema("test.child@1 > test.parent@1", z)
 @alias("test.child", Child)
+@schema("test.grandchild@1 > test.child@1", a::Int32 = round(Int32, a), y::String = string(y[1:2]))
+@alias("test.grandchild", Grandchild)
 
-@testset "Legolas.@schema" begin
-    @test_throws SchemaDeclarationError("no required fields declared") @schema("name@1")
-    id = "name@1"
-    @test_throws SchemaDeclarationError("schema identifier must be a string literal") @schema(id, x)
-    @test_throws SchemaDeclarationError("schema identifier should specify at most one parent, found multiple: " *
-                                        "Schema[Schema(\"bob\", 1), Schema(\"dave\", 1), Schema(\"joe\", 1)]") @schema("bob@1 > dave@1 > joe@1", x)
-    @test_throws SchemaDeclarationError("cannot have duplicate field names in `@schema` declaration; recieved: [:x, :y, :x, :z]") @schema("name@1", x, y, x, z)
-    @test_throws SchemaDeclarationError("parent schema cannot be used before it has been declared: Schema(\"test.parent\", 2)") @schema("test.child@2 > test.parent@2", x)
-    @test_throws SchemaDeclarationError("declared field types violate parent schema's field types") @schema("new@1 > test.parent@1", y::Int)
-    @test_throws SchemaDeclarationError("invalid redeclaration of existing schema; all `@schema` redeclarations must exactly match previous declarations") @schema("test.parent@1", x, y)
+@testset "`Legolas.@schema` and associated utilities for declared `Legolas.Schema`s" begin
+    @testset "Legolas.SchemaDeclarationError" begin
+        @test_throws SchemaDeclarationError("no required fields declared") @schema("name@1")
+        @test_throws SchemaDeclarationError("schema identifier must be a string literal") @schema(id, x)
+        @test_throws SchemaDeclarationError("schema identifier should specify at most one parent, found multiple: " *
+                                            "Schema[Schema(\"bob\", 1), Schema(\"dave\", 1), Schema(\"joe\", 1)]") @schema("bob@1 > dave@1 > joe@1", x)
+        @test_throws SchemaDeclarationError("cannot have duplicate field names in `@schema` declaration; recieved: [:x, :y, :x, :z]") @schema("name@1", x, y, x, z)
+        @test_throws SchemaDeclarationError("parent schema cannot be used before it has been declared: Schema(\"test.parent\", 2)") @schema("test.child@2 > test.parent@2", x)
+        @test_throws SchemaDeclarationError("declared field types violate parent schema's field types") @schema("new@1 > test.parent@1", y::Int)
+        @test_throws SchemaDeclarationError("declared field types violate parent schema's field types") @schema("new@1 > test.child@1", y::Int)
+        @test_throws SchemaDeclarationError("invalid redeclaration of existing schema; all `@schema` redeclarations must exactly match previous declarations") @schema("test.parent@1", x, y)
+        @test_throws SchemaDeclarationError("malformed `@schema` field expression: f()") @schema("test.child@2", f())
+    end
+
+    undeclared = Schema("undeclared", 3)
+
+    @testset "Legolas.schema_declared" begin
+        @test !Legolas.schema_declared(undeclared)
+        @test !Legolas.schema_declared(Child(3))
+        @test all(Legolas.schema_declared, (Parent(1), Child(1), Grandchild(1)))
+    end
+
+    @testset "Legolas.schema_parent" begin
+        @test isnothing(Legolas.schema_parent(undeclared))
+        @test isnothing(Legolas.schema_parent(Child(3)))
+        @test Legolas.schema_parent(Child(1)) == Parent(1)
+        @test Legolas.schema_parent(Grandchild(1)) == Child(1)
+    end
+
+    @testset "Legolas.schema_identifier" begin
+        @test_throws Legolas.UnknownSchemaError(undeclared) Legolas.schema_identifier(undeclared)
+        @test_throws Legolas.UnknownSchemaError(Child(3)) Legolas.schema_identifier(Child(3))
+        @test Legolas.schema_identifier(Child(1)) == "test.child@1>test.parent@1"
+        @test Legolas.schema_identifier(Grandchild(1)) == "test.grandchild@1>test.child@1>test.parent@1"
+    end
+
+    @testset "Legolas.schema_fields" begin
+        @test_throws Legolas.UnknownSchemaError(undeclared) Legolas.schema_fields(undeclared)
+        @test_throws Legolas.UnknownSchemaError(Child(3)) Legolas.schema_fields(Child(3))
+        @test Legolas.schema_fields(Parent(1)) == (x=Vector, y=AbstractString)
+        @test Legolas.schema_fields(Child(1)) == (x=Vector, y=AbstractString, z=Any)
+        @test Legolas.schema_fields(Grandchild(1)) == (x=Vector, y=String, z=Any, a=Int32)
+    end
+
+    @testset "Legolas.find_violation + Legolas.complies_with + Legolas.validate" begin
+        @test_throws Legolas.UnknownSchemaError(undeclared) Legolas.validate(Tables.Schema((:a, :b), (Int, Int)), undeclared)
+        @test_throws Legolas.UnknownSchemaError(Child(3)) Legolas.validate(Tables.Schema((:a, :b), (Int, Int)), Child(3))
+
+        @test_throws Legolas.UnknownSchemaError(undeclared) Legolas.complies_with(Tables.Schema((:a, :b), (Int, Int)), undeclared)
+        @test_throws Legolas.UnknownSchemaError(Child(3)) Legolas.complies_with(Tables.Schema((:a, :b), (Int, Int)), Child(3))
+
+        @test_throws Legolas.UnknownSchemaError(undeclared) Legolas.find_violation(Tables.Schema((:a, :b), (Int, Int)), undeclared)
+        @test_throws Legolas.UnknownSchemaError(Child(3)) Legolas.find_violation(Tables.Schema((:a, :b), (Int, Int)), Child(3))
+
+        # Note that many of the basic properties of `find_violation`/`complies_with`/`validate`
+        # are unit-tested in `examples/tour.jl`; thus, we focus here on testing that these
+        # functions work as expected w.r.t. schema extension in particular.
+
+        t = Tables.Schema((:a, :y, :z), (Int32, String, Any))
+        for s in (Grandchild(1), Child(1), Parent(1))
+            @test_throws ArgumentError("could not find expected field `x` in $t") Legolas.validate(t, s)
+            @test !Legolas.complies_with(t, s)
+            @test isequal(Legolas.find_violation(t, s), :x => missing)
+        end
+
+        t = Tables.Schema((:x, :a, :y), (ComplexF64, Int32, String))
+        for s in (Grandchild(1), Child(1), Parent(1))
+            @test_throws ArgumentError("field `x` has unexpected type; expected <:Vector{T} where T, found ComplexF64") Legolas.validate(t, s)
+            @test !Legolas.complies_with(t, s)
+            @test isequal(Legolas.find_violation(t, s), :x => ComplexF64)
+        end
+
+        t = Tables.Schema((:x, :a, :y), (Vector, Int32, String))
+        for s in (Grandchild(1), Child(1), Parent(1))
+            @test isnothing(Legolas.validate(t, s))
+            @test Legolas.complies_with(t, s)
+            @test isnothing(Legolas.find_violation(t, s))
+        end
+    end
+
+    @testset "Legolas.schema_declaration" begin
+        @test_throws Legolas.UnknownSchemaError(undeclared) Legolas.schema_declaration(undeclared)
+        @test_throws Legolas.UnknownSchemaError(Child(3)) Legolas.schema_declaration(Child(3))
+        @test Legolas.schema_declaration(Parent(1)) == ("test.parent@1" => Dict(:y => :(y::AbstractString = y), :x => :(x::Vector = x)))
+        @test Legolas.schema_declaration(Child(1)) == ("test.child@1>test.parent@1" => Dict(:z => :(z::Any = z)))
+        @test Legolas.schema_declaration(Grandchild(1)) == ("test.grandchild@1>test.child@1" => Dict(:a => :(a::Int32 = round(Int32, a)), :y => :(y::String = string(y[1:2]))))
+    end
+
+    @test_throws Legolas.UnknownSchemaError(undeclared) row(undeclared; a=1, b=2)
+    @test_throws Legolas.UnknownSchemaError(Child(3)) row(Child(3); a=1, b=2)
+    r0 = (x=[42], y="foo", z=:three, a=1.3)
+    r0_arrow = first(Tables.rows(Arrow.Table(Arrow.tobuffer([r0]))))
+    for s in (Child(1), Parent(1))
+        @test Set(pairs(row(s, r0))) == Set(pairs(r0))
+        @test Set(pairs(row(s, r0_arrow))) == Set(pairs(r0))
+        @test Set(pairs(row(s; r0...))) == Set(pairs(r0))
+    end
+    r1 = (x=[42], y="fo", z=:three, a=1)
+    @test Set(pairs(row(Grandchild(1), r0))) == Set(pairs(r1))
+    @test Set(pairs(row(Grandchild(1), r0_arrow))) == Set(pairs(r1))
+    @test Set(pairs(row(Grandchild(1); r0...))) == Set(pairs(r1))
+
+    schemas = [Grandchild(1), Child(1), Parent(1)]
+    tbl = Arrow.Table(Arrow.tobuffer((; schema=schemas)))
+    @test all(tbl.schema .== schemas)
 end
-
-
-    # @test
-    # @test Legolas.schema_parent(Schema("bar", 1)) == Schema("foo", 1)
-
-    # r = apply(Schema("bar", 1), (x=1, y=2, z=3))
-
-    # @test propertynames(r) == (:z, :x, :y)
-    # @test r === apply(Schema("bar", 1), r)
-    # @test r === apply(Schema("bar", 1); x=1, y=2, z=3)
-    # @test r === apply(Schema("bar", 1), first(Tables.rows(Arrow.Table(Arrow.tobuffer((x=[1],y=[2],z=[3]))))))
-
-    # tbl = Arrow.Table(Arrow.tobuffer((x=[r],)))
-    # @test r === tbl.x[1]
-
-    # long_row = apply(Schema("bar", 1), (x=1, y=2, z=zeros(100, 100)))
-    # @test length(sprint(show, long_row; context=(:limit => true))) < 200
-
-    # @test_throws Legolas.UnknownSchemaError Legolas.apply(Legolas.Schema("imadethisup@3"); a=1, b=2)
-    # @test_throws Legolas.UnknownSchemaError Legolas.validate(Tables.Schema((:a, :b), (Int, Int)), Legolas.Schema("imadethisup@3"))
-    # @test_throws Legolas.UnknownSchemaError Legolas.schema_identifier(Legolas.Schema("imadethisup@3"))
-
-    # sch = Schema("bar", 1)
-    # @test Schema(sch) == sch
-
-    # schemas = [Schema("bar", 1), Schema("foo", 1)]
-    # tbl = Arrow.Table(Arrow.tobuffer((; schema=schemas)))
-    # @test all(tbl.schema .== schemas)
-# end
-
-
 #=
 
 ########################
@@ -275,41 +343,6 @@ end
 
     t = Arrow.tobuffer((a=[1, 2], b=[3, 4]); metadata=Dict(Legolas.LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY => "haha@3"))
     @test_throws Legolas.UnknownSchemaError Legolas.read(t)
-end
-
-
-@testset "miscellaneous Legolas.Schema tests" begin
-    @test_throws ArgumentError("`Legolas.Schema` version must be non-negative, received: -1") Schema("good_name", -1)
-    @test_throws ArgumentError("argument is not a valid `Legolas.Schema` name: \"bad_name?\"") Schema("bad_name?", 1)
-    @test_throws ArgumentError("argument is not a valid `Legolas.Schema` string: \"bad_name>?@1\"") Schema("bad_name>?@1")
-
-    @schema("foo@1", x, y)
-    @schema("bar@1" > "foo@1", z)
-    @test Legolas.schema_parent(Schema("bar", 1)) == Schema("foo", 1)
-
-    r = apply(Schema("bar", 1), (x=1, y=2, z=3))
-
-    @test propertynames(r) == (:z, :x, :y)
-    @test r === apply(Schema("bar", 1), r)
-    @test r === apply(Schema("bar", 1); x=1, y=2, z=3)
-    @test r === apply(Schema("bar", 1), first(Tables.rows(Arrow.Table(Arrow.tobuffer((x=[1],y=[2],z=[3]))))))
-
-    tbl = Arrow.Table(Arrow.tobuffer((x=[r],)))
-    @test r === tbl.x[1]
-
-    long_row = apply(Schema("bar", 1), (x=1, y=2, z=zeros(100, 100)))
-    @test length(sprint(show, long_row; context=(:limit => true))) < 200
-
-    @test_throws Legolas.UnknownSchemaError Legolas.apply(Legolas.Schema("imadethisup@3"); a=1, b=2)
-    @test_throws Legolas.UnknownSchemaError Legolas.validate(Tables.Schema((:a, :b), (Int, Int)), Legolas.Schema("imadethisup@3"))
-    @test_throws Legolas.UnknownSchemaError Legolas.schema_identifier(Legolas.Schema("imadethisup@3"))
-
-    sch = Schema("bar", 1)
-    @test Schema(sch) == sch
-
-    schemas = [Schema("bar", 1), Schema("foo", 1)]
-    tbl = Arrow.Table(Arrow.tobuffer((; schema=schemas)))
-    @test all(tbl.schema .== schemas)
 end
 
 @testset "schema field name and type tests" begin

@@ -224,7 +224,7 @@ Arrow.ArrowTypes.arrowname(::Type{<:Schema}) = LEGOLAS_SCHEMA_ARROW_NAME
 Arrow.ArrowTypes.ArrowType(::Type{<:Schema}) = String
 Arrow.ArrowTypes.toarrow(schema::Schema) = schema_identifier(schema)
 Arrow.ArrowTypes.JuliaType(::Val{LEGOLAS_SCHEMA_ARROW_NAME}, ::Any) = Schema
-Arrow.ArrowTypes.fromarrow(::Type{<:Schema}, qualified_string) = Schema(qualified_string)
+Arrow.ArrowTypes.fromarrow(::Type{<:Schema}, qualified_string) = first(parse_schema_identifier(qualified_string))
 
 #####
 ##### `Tables.Schema` validation
@@ -294,12 +294,11 @@ function Base.showerror(io::IO, e::SchemaDeclarationError)
               """)
 end
 
-function _normalize_field(f)
-    original_f = f
+function _normalize_field!(f)
     f isa Symbol && (f = Expr(:(::), f, :Any))
     f.head == :(::) && (f = Expr(:(=), f, f.args[1]))
     f.head == :(=) && f.args[1] isa Symbol && (f.args[1] = Expr(:(::), f.args[1], :Any))
-    f.head == :(=) && f.args[1].head == :(::) || throw(SchemaDeclarationError("malformed `@schema` field expression: $original_f"))
+    f.head == :(=) && f.args[1].head == :(::) || error("couldn't normalize field expression: $f")
     return f
 end
 
@@ -351,6 +350,7 @@ end
 
 macro schema(id, field_exprs...)
     id isa String || return :(throw(SchemaDeclarationError("schema identifier must be a string literal")))
+
     schemas = nothing
     try
         schemas = parse_schema_identifier(id)
@@ -369,8 +369,17 @@ macro schema(id, field_exprs...)
     end
 
     isempty(field_exprs) && return :(throw(SchemaDeclarationError("no required fields declared")))
-    fields = [(name=stmt.args[1].args[1], type=stmt.args[1].args[2], statement=stmt)
-              for stmt in map(_normalize_field, field_exprs)]
+
+    fields = NamedTuple[]
+    for stmt in field_exprs
+        original_stmt = Base.Meta.quot(deepcopy(stmt))
+        try
+            stmt = _normalize_field!(stmt)
+        catch
+            return :(throw(SchemaDeclarationError(string("malformed `@schema` field expression: ", $original_stmt))))
+        end
+        push!(fields, (name=stmt.args[1].args[1], type=stmt.args[1].args[2], statement=stmt))
+    end
     allunique(f.name for f in fields) || return :(throw(SchemaDeclarationError(string("cannot have duplicate field names in `@schema` declaration; recieved: ", $([f.name for f in fields])))))
     field_names_types = Expr(:tuple, (:($(f.name) = $(f.type)) for f in fields)...)
 
