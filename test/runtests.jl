@@ -196,8 +196,10 @@ end
 
 @schema("test.parent@1", x::Vector, y::AbstractString)
 @alias("test.parent", Parent)
+
 @schema("test.child@1 > test.parent@1", z)
 @alias("test.child", Child)
+
 @schema("test.grandchild@1 > test.child@1", a::Int32 = round(Int32, a), y::String = string(y[1:2]))
 @alias("test.grandchild", Grandchild)
 
@@ -307,12 +309,6 @@ end
     tbl = Arrow.Table(Arrow.tobuffer((; schema=schemas)))
     @test all(tbl.schema .== schemas)
 end
-#=
-
-########################
-########################
-########################
-
 
 @testset "miscellaneous Legolas/src/tables.jl tests" begin
     struct MyPath
@@ -322,89 +318,24 @@ end
     Base.write(p::MyPath, bytes) = Base.write(p.x, bytes)
     root = mktempdir()
     path = MyPath(joinpath(root, "baz.arrow"))
-    Baz = @row("baz@1", a, b)
-    t = [Baz(a=1, b=2), Baz(a=3, b=4)]
-    Legolas.write(path, t, Schema("baz", 1))
-    @test t == Baz.(Tables.rows(Legolas.read(path)))
-    tbl = Arrow.Table(Legolas.tobuffer(t, Schema("baz", 1); metadata=("a" => "b", "c" => "d")))
-    @test Set(Arrow.getmetadata(tbl)) == Set((Legolas.LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY => "baz@1",
+    t = [(x=[1,2], y="hello"), (x=[3,4], y="bye")]
+    Legolas.write(path, t, Parent(1))
+    @test t == [row(Parent(1), r) for r in Tables.rows(Legolas.read(path))]
+    tbl = Arrow.Table(Legolas.tobuffer(t, Parent(1); metadata=("a" => "b", "c" => "d")))
+    @test Set(Arrow.getmetadata(tbl)) == Set((Legolas.LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY => "test.parent@1",
                                               "a" => "b", "c" => "d"))
 
-    struct Foo
+    struct Moo
         meta
     end
-    Legolas.Arrow.getmetadata(foo::Foo) = foo.meta
-    foo = Foo(Dict("a" => "b", "b" => "b",
-                   Legolas.LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY => "baz@1"))
-    @test Legolas.Schema("baz", 1) == Legolas.extract_legolas_schema(foo)
+    Legolas.Arrow.getmetadata(moo::Moo) = moo.meta
+    moo = Moo(Dict("a" => "b", "b" => "b",
+                   Legolas.LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY => "test.parent@1"))
+    @test Parent(1) == Legolas.extract_legolas_schema(moo)
 
-    t = [(a="a", c=1, b="b"), Baz(a=1, b=2)] # not a valid Tables.jl table
-    @test_throws ErrorException Legolas.validate(t, Schema("baz", 1))
+    t = [(a="a", c=1, b="b"), (a=1, b=2)] # not a valid Tables.jl table
+    @test_throws ErrorException Legolas.guess_schema(t)
 
     t = Arrow.tobuffer((a=[1, 2], b=[3, 4]); metadata=Dict(Legolas.LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY => "haha@3"))
     @test_throws Legolas.UnknownSchemaError Legolas.read(t)
 end
-
-@testset "schema field name and type tests" begin
-    Parent = @row("parent@1",
-                  first_parent_field::Int=1,
-                  second_parent_field::String="second")
-
-    parent_fields = (:first_parent_field, :second_parent_field)
-    parent_field_types = (Int, String)
-
-    @test Legolas.schema_field_names(Schema{:parent,1}) == parent_fields
-    @test Legolas.schema_field_names(Schema("parent@1")) == parent_fields
-    @test Legolas.schema_field_names(Parent()) == parent_fields
-    @test Legolas.schema_field_names(Parent) == parent_fields
-
-    @test Legolas.schema_field_types(Schema{:parent,1}) == parent_field_types
-    @test Legolas.schema_field_types(Schema("parent@1")) == parent_field_types
-    @test Legolas.schema_field_types(Parent()) == parent_field_types
-    @test Legolas.schema_field_types(Parent) == parent_field_types
-
-    Child = @row("child@1" > "parent@1",
-                 first_child_field::Symbol=:first,
-                 second_child_field="I can be anything")
-
-    child_fields = (:first_child_field, :second_child_field, parent_fields...)
-    child_field_types = (Symbol, Any, parent_field_types...)
-
-    @test Legolas.schema_field_names(Schema{:child,1}) == child_fields
-    @test Legolas.schema_field_names(Schema("child@1")) == child_fields
-    @test Legolas.schema_field_names(Child()) == child_fields
-    @test Legolas.schema_field_names(Child) == child_fields
-
-    @test Legolas.schema_field_types(Schema{:child,1}) == child_field_types
-    @test Legolas.schema_field_types(Schema("child@1")) == child_field_types
-    @test Legolas.schema_field_types(Child()) == child_field_types
-    @test Legolas.schema_field_types(Child) == child_field_types
-
-    @test_throws MethodError Legolas.schema_field_names(Legolas.Schema("imadethisup@3"))
-    @test_throws MethodError Legolas.schema_field_types(Legolas.Schema("imadethisup@3"))
-end
-
-@testset "isequal, hash" begin
-    TestRow = @row("testrow@1", x, y)
-
-    foo = TestRow(; x=[1])
-    foo2 = TestRow(; x=[1])
-    @test isequal(foo, foo2)
-    @test hash(foo) == hash(foo2)
-
-    foo3 = TestRow(; x=[3])
-    @test !isequal(foo, foo3)
-    @test hash(foo) != hash(foo3)
-end
-
-@schema("my-inner-schema@1", b::Int=1)
-@schema("my-outer-schema@1",
-        a::String,
-        x::NamedTuple=Legolas.row(Legolas.Schema("my-inner-schema@1"), x))
-
-@testset "Nested arrow serialization" begin
-    table = [(; a="outer_a", x=(; b=1))]
-    roundtripped_table = Legolas.read(Legolas.tobuffer(table, Legolas.Schema("my-outer-schema@1")))
-    @test table == (r -> Legolas.row(Legolas.Schema("my-outer-schema@1"), r)).(Tables.rows(roundtripped_table))
-end
-=#
