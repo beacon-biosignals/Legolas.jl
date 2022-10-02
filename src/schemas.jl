@@ -315,8 +315,8 @@ end
 _validate_wrt_parent(child_fields::NamedTuple, parent::Nothing) = nothing
 
 function _validate_wrt_parent(child_fields::NamedTuple, parent::Schema)
-    schema_declared(parent) || throw(SchemaDeclarationError("parent not registered TODO"))
-    _has_valid_child_field_types(child_fields, schema_fields(parent)) || throw(SchemaDeclarationError("bad field types TODO"))
+    schema_declared(parent) || throw(SchemaDeclarationError("parent schema cannot be used before it has been declared: $parent"))
+    _has_valid_child_field_types(child_fields, schema_fields(parent)) || throw(SchemaDeclarationError("declared field types violate parent schema's field types"))
     return nothing
 end
 
@@ -404,7 +404,7 @@ macro schema(id, field_exprs...)
     end
     return quote
         if Legolas.schema_declared($quoted_schema) && Legolas.schema_declaration($quoted_schema) != $quoted_schema_declaration
-            return :(throw(SchemaDeclarationError("invalid schema redefinition TODO")))
+            throw(SchemaDeclarationError("invalid redeclaration of existing schema; all `@schema` redeclarations must exactly match previous declarations"))
         else
             Legolas._validate_wrt_parent($field_names_types, $quoted_parent)
 

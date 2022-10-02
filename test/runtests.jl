@@ -192,6 +192,11 @@ end
     @test_throws ArgumentError("`schema_name` provided to `@alias` is not a valid `Legolas.Schema` name: \"joe?\"") @alias("joe?", J)
 end
 
+@schema("test.parent@1", x, y::AbstractString)
+@alias("test.parent", Parent)
+@schema("test.child@1 > test.parent@1", z)
+@alias("test.child", Child)
+
 @testset "Legolas.@schema" begin
     @test_throws SchemaDeclarationError("no required fields declared") @schema("name@1")
     id = "name@1"
@@ -199,7 +204,39 @@ end
     @test_throws SchemaDeclarationError("schema identifier should specify at most one parent, found multiple: " *
                                         "Schema[Schema(\"bob\", 1), Schema(\"dave\", 1), Schema(\"joe\", 1)]") @schema("bob@1 > dave@1 > joe@1", x)
     @test_throws SchemaDeclarationError("cannot have duplicate field names in `@schema` declaration; recieved: [:x, :y, :x, :z]") @schema("name@1", x, y, x, z)
+    @test_throws SchemaDeclarationError("parent schema cannot be used before it has been declared: Schema(\"test.parent\", 2)") @schema("test.child@2 > test.parent@2", x)
+    @test_throws SchemaDeclarationError("declared field types violate parent schema's field types") @schema("new@1 > test.parent@1", y::Int)
+    @test_throws SchemaDeclarationError("invalid redeclaration of existing schema; all `@schema` redeclarations must exactly match previous declarations") @schema("test.parent@1", x, y)
 end
+
+
+    # @test
+    # @test Legolas.schema_parent(Schema("bar", 1)) == Schema("foo", 1)
+
+    # r = apply(Schema("bar", 1), (x=1, y=2, z=3))
+
+    # @test propertynames(r) == (:z, :x, :y)
+    # @test r === apply(Schema("bar", 1), r)
+    # @test r === apply(Schema("bar", 1); x=1, y=2, z=3)
+    # @test r === apply(Schema("bar", 1), first(Tables.rows(Arrow.Table(Arrow.tobuffer((x=[1],y=[2],z=[3]))))))
+
+    # tbl = Arrow.Table(Arrow.tobuffer((x=[r],)))
+    # @test r === tbl.x[1]
+
+    # long_row = apply(Schema("bar", 1), (x=1, y=2, z=zeros(100, 100)))
+    # @test length(sprint(show, long_row; context=(:limit => true))) < 200
+
+    # @test_throws Legolas.UnknownSchemaError Legolas.apply(Legolas.Schema("imadethisup@3"); a=1, b=2)
+    # @test_throws Legolas.UnknownSchemaError Legolas.validate(Tables.Schema((:a, :b), (Int, Int)), Legolas.Schema("imadethisup@3"))
+    # @test_throws Legolas.UnknownSchemaError Legolas.schema_identifier(Legolas.Schema("imadethisup@3"))
+
+    # sch = Schema("bar", 1)
+    # @test Schema(sch) == sch
+
+    # schemas = [Schema("bar", 1), Schema("foo", 1)]
+    # tbl = Arrow.Table(Arrow.tobuffer((; schema=schemas)))
+    # @test all(tbl.schema .== schemas)
+# end
 
 
 #=
