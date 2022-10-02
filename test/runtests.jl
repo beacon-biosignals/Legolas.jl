@@ -1,6 +1,6 @@
 using Legolas, Test, DataFrames, Arrow
 
-using Legolas: Schema, @schema, apply
+using Legolas: Schema, @schema, @alias, row, SchemaDeclarationError
 
 include(joinpath(dirname(@__DIR__), "examples", "tour.jl"))
 
@@ -109,229 +109,100 @@ end
     @test Legolas._iterator_for_column(a, :x) == dfa.x
 end
 
-expected_bad_name_message(x) = "argument is not a valid `Legolas.Schema` name: \"$x\""
-expected_bad_id_message(x) = "argument is not a valid `Legolas.Schema` identifier: \"$x\""
-expected_bad_version_message(x) = "`Legolas.Schema` version must be non-negative, received: $x"
+bad_id_message(x) = "failed to parse seemingly invalid/malformed schema identifier string: \"$x\""
+bad_name_message(x) = "argument is not a valid `Legolas.Schema` name: \"$x\""
+bad_version_message(x) = "`version` in `Schema{_,version}` must be a non-negative integer, received: $x"
 
-function generate_test_schema_identifiers(good_names, bad_names)
-    # [(schema identifier, expected schemas), ...]
-    good_identifiers = Pair{String,Vector{Schema}}[]
-    # [(schema identifier, expected error message), ...]
-
-    bad_identifiers = Tuple{Pair{String,String},Pair{Expr,String}}[]
-    for good in good_names
-        push!(good_identifiers, "$good@1" => "$good@1")
-        push!(bad_identifiers, (good => expected_bad_id_message(good), Expr(:quote, good) => "TODO"))
-        for other_good in good_names
-            good == other_good && continue
-            push!(good_identifiers, "$good@1" => "$good@1>$other_good@1")
-            for bad in ("$good>$other_good@1",
-                        "$good@1>$other_good",
-                        ("$good@1 $s $other_good@1" for s in ("<", "<:", ":", "="))...)
-                push!(bad_identifiers, (bad => expected_bad_id_message(bad), Expr(:quote, bad) => "TODO"))
-            end
-        end
-    end
-    # for bad in bad_names
-    #     push!(bad_identifiers, "$bad" => Expr(:quote, bad))
-    #     bad = "$bad@1"
-    #     push!(bad_identifiers, "$bad" => Expr(:quote, bad))
-    #     for good in good_names
-    #         good = "$good@1"
-    #         push!(bad_identifiers, "$bad>$good" => Expr(:(>), bad, good))
-    #         push!(bad_identifiers, "$good>$bad" => Expr(:(>), good, bad))
-    #     end
-    # end
-    return good_identifiers, bad_identifiers
+function bad_schema_declaration_message(id, err)
+    return "Error encountered attempting to parse schema identifier.\n" *
+           "Received: \"$id\"\n" *
+           "Encountered: ArgumentError: " * err
 end
 
-@testset "`Legolas.Schema`" begin
+@testset "Legolas.Schema + Legolas.parse_schema_identifier" begin
     good_schema_names = ("foo", "test.foo", "test.foo-bar", ".-technically-allowed-.")
     good_versions = (0, 1, 2, 3)
     bad_schema_names = ("has_underscore", "caPitaLs",  "has a space", "illegal?chars*")
     bad_versions = (-1, -2, -3)
 
-    for bad in bad_schema_names, v in good_versions
-        @test_throws ArgumentError(expected_bad_name_message(bad)) Schema(bad, v)
-        @test_throws ArgumentError(expected_bad_name_message(bad)) Schema("$bad@$v")
-    end
-    for good in good_schema_names, v in good_versions
-        @test Schema(good, v) == Schema("$good@$v")
-        @test Schema(good, v) == Schema{Symbol(good),v}()
-    end
-    for name in Iterators.flatten((bad_schema_names, good_schema_names)), bad in bad_versions
-        @test_throws ArgumentError(expected_bad_version_message(bad)) Schema("$name@$bad")
-        @test_throws ArgumentError(expected_bad_version_message(bad)) Schema(name, bad)
+    for n in good_schema_names, v in good_versions
+        @test Legolas.parse_schema_identifier("$n@$v") == [Schema(n, v)]
+        @test Schema(n, v) == Schema{Symbol(n),v}()
     end
 
-    good_schema_identifiers, bad_schema_identifiers = generate_test_schema_identifiers(good_schema_names, bad_schema_names)
-
-    for (good_child, good_full) in good_schema_identifiers
-        @test Schema(good_child) == Schema(good_full)
-    end
-    for ((bad_string, expected_message), _) in bad_schema_identifiers
-        @test_throws ArgumentError(expected_message) Schema(bad_string)
+    for n in good_schema_names, v in bad_versions
+        @test_throws ArgumentError(bad_version_message(v)) Schema(n, v)
+        id = "$n@$v"
+        @test_throws ArgumentError(bad_version_message(v)) Legolas.parse_schema_identifier(id)
+        @test_throws SchemaDeclarationError(bad_schema_declaration_message(id, bad_version_message(v))) @eval(@schema($id))
     end
 
-    # for bad in bad_schema_identifiers
+    for n in bad_schema_names, v in Iterators.flatten((bad_versions, good_versions))
+        @test_throws ArgumentError(bad_name_message(n)) Schema(n, v)
+        id = "$n@$v"
+        @test_throws ArgumentError(bad_name_message(n)) Legolas.parse_schema_identifier(id)
+        @test_throws SchemaDeclarationError(bad_schema_declaration_message(id, bad_name_message(n))) @eval(@schema($id))
+    end
 
+    for n in good_schema_names, m in good_schema_names
+        @test Legolas.parse_schema_identifier("$n@3>$m@2") == [Schema(n, 3), Schema(m, 2)]
+        @test Legolas.parse_schema_identifier("$n@1>$m@0>bob@3") == [Schema(n, 1), Schema(m, 0), Schema("bob", 3)]
+        @test Legolas.parse_schema_identifier("$n@1 >$m@0 > bob@3 ") == [Schema(n, 1), Schema(m, 0), Schema("bob", 3)]
+        id = "$n@1 >$m @0 > bob@3 "
+        @test_throws ArgumentError(bad_name_message("$m ")) Legolas.parse_schema_identifier(id)
+        @test_throws SchemaDeclarationError(bad_schema_declaration_message(id, bad_name_message("$m "))) @eval(@schema($id))
+        for bad_id in ("$n>$m@1",
+                       "$n@1>$m",
+                       "$n@>$m@",
+                       "$n>$m@",
+                       "$n@>$m",
+                       "$n>$m")
+            @test_throws ArgumentError(bad_id_message(bad_id)) Legolas.parse_schema_identifier(bad_id)
+            @test_throws SchemaDeclarationError(bad_schema_declaration_message(bad_id, bad_id_message(bad_id))) @eval(@schema($bad_id))
+        end
+        for bad_separator in ("<", "<:", ":", "=")
+            id = "$n@1" * bad_separator * "$m@0"
+            @test_throws ArgumentError(bad_id_message(id)) Legolas.parse_schema_identifier(id)
+            @test_throws SchemaDeclarationError(bad_schema_declaration_message(id, bad_id_message(id))) @eval(@schema($id))
+        end
+    end
 
-    # for good
-
-    # # some utilities
-
-    # declaration_parsing_error_message = (rec, enc) -> begin
-    #     return """
-    #            Error encountered attempting to parse first argument provided to `@schema`.
-    #            Received: $rec
-    #            Encountered: ArgumentError: $enc"""
-    # end
-
-    # for bad in ("has_underscore",
-    #             "caPitaLs",
-    #             "has a space",
-    #             "illegal?chars*")
-    #     @test_throws ArgumentError(bad_name_message(bad)) Schema(bad, 1)
-    #     @test_throws ArgumentError(bad_id_message(bad)) Schema(bad)
-    #     msg = declaration_parsing_error_message(bad, bad_id_message(bad))
-    #     @eval @test_throws Legolas.SchemaDeclarationError($msg) @schema($bad, x)
-    #     for expr in ("$bad@1",
-    #                  Expr(:call, :(>), "$bad@1", "parent@1"),
-    #                  Expr(:call, :(>), "child@1", "$bad@1"))
-    #         msg = declaration_parsing_error_message(expr, bad_name_message(bad))
-    #         @eval @test_throws Legolas.SchemaDeclarationError($msg) @schema($expr, x)
-    #         @eval @test_throws Legolas.SchemaDeclarationError("no required fields declared") @schema($expr)
-    #     end
-    # end
-
-    # for good in ("foo",
-    #              "test.foo",
-    #              "test.foo-bar",
-    #              ".-technically-allowed-.")
-    #     @test Schema(good, 1) == Schema("$good@1")
-    #     @test Schema(good, 1) == Schema{Symbol(good), 1}()
-
-    #     # @test_throws ArgumentError(bad_id_message(bad)) Schema(bad)
-    #     # msg = declaration_parsing_error_message(bad, bad_id_message(bad))
-    #     # @eval @test_throws Legolas.SchemaDeclarationError($msg) @schema($bad, x)
-    #     # for expr in ("$bad@1",
-    #     #             Expr(:call, :(>), "$bad@1", "parent@1"),
-    #     #             Expr(:call, :(>), "child@1", "$bad@1"))
-    #     #     msg = declaration_parsing_error_message(expr, bad_name_message(bad))
-    #     #     @eval @test_throws Legolas.SchemaDeclarationError($msg) @schema($expr, x)
-    #     # end
-    # end
-
-    # msg = declaration_parsing_error_message(bad, bad_name_message(bad))
-    # msg = declaration_parsing_error_message(bad, bad_name_message(bad))
-    # msg = declaration_parsing_error_message(bad, bad_name_message(bad))
-
-
-    # bad = "Caps"
-    # @test_throws ArgumentError(bad_name_message(bad)) Schema(bad, 1)
-    # @test_throws ArgumentError(bad_id_message(bad)) Schema(bad)
-    # for (expr, msg) in (bad,
-    #                     "$bad@1",
-    #                     Expr(:call, :(>), "$bad@1", "parent@1"),
-    #                     Expr(:call, :(>), "child@1", "$bad@1"),
-    #                     )
-
-    # msg = declaration_parsing_error_message(bad, bad_id_message(bad))
-    # @eval @test_throws Legolas.SchemaDeclarationError($msg) @schema($bad, x)
-    # msg = declaration_parsing_error_message(bad, bad_id_message(bad))
-    # @eval @test_throws Legolas.SchemaDeclarationError($msg) @schema($bad, x)
-
-
-
-    # bad_id_msg = "argument is not a valid `Legolas.Schema` identifier: \"$bad\""
-    # @test_throws ArgumentError(bad_id_msg) Schema(bad)
-
-    # for (bad, earliest_problem) in ("has_underscore" => :name,
-    #                                 "Caps" => :name,
-    #                                 "question?" => :name,
-    #                                 ">bad.prefix" => :identifier,
-    #                                 "bad.suffix>" => :identifier,
-    #                                 "oops.oops@-1" => :negative_version,
-    #                                 "child.oops@1>parent.oops@1" => :identifier)
-
-    #     bad_name_msg = "argument is not a valid `Legolas.Schema` name: \"$bad\""
-    #     @test_throws ArgumentError(bad_name_msg) Schema(bad, 1)
-
-    #     bad_id_msg = "argument is not a valid `Legolas.Schema` identifier: \"$bad\""
-    #     @test_throws ArgumentError(bad_id_msg) Schema(bad)
-
-    #     # for bad_expr in ("$bad_name@1",
-    #     #                  Expr(:call, :(>), "$bad_name@1", "parent@1"),
-    #     #                  Expr(:call, :(>), "child@1", "$bad_name@1"))
-    #     #     dec_err_msg = declaration_parsing_error_message(bad_expr, "ArgumentError: $arg_err_msg")
-    #     #     @eval @test_throws Legolas.SchemaDeclarationError($dec_err_msg) @schema($bad_expr, x)
-    #     # end
-    # end
-
-    # for bad_id in bad_schema_names
-    #     @test_throws ArgumentError("argument is not a valid `Legolas.Schema` name: \"$bad_id\"") Schema(bad_id, 1)
-    #     arg_err_msg = "argument is not a valid `Legolas.Schema` identifier: \"$bad_id\""
-    #     @test_throws ArgumentError(arg_err_msg) Schema(bad_id)
-    #     for bad_expr in (bad_id,
-    #                      Expr(:call, :(>), bad_id, "parent@1"),
-    #                      Expr(:call, :(>), "child@1", bad_id))
-    #         dec_err_msg = declaration_parsing_error_message(bad_expr, "ArgumentError: $arg_err_msg")
-    #         @eval @test_throws Legolas.SchemaDeclarationError($dec_err_msg) @schema($bad_expr, x)
-    #     end
-    # end
-
-
-    # msg =
-    # @test_throws ArgumentError("argument is not a valid `Legolas.Schema` name: \"has_underscore\"") Schema("has_underscore", 1)
-    # msg = declaration_parsing_error_message("", "ArgumentError: $msg")
-    # @test_throws Legolas.SchemaDeclarationError($dec_err_msg) @schema($bad_expr, x)
-
-
-    # @test_throws ArgumentError("argument is not a valid `Legolas.Schema` name: \"Caps\"") Schema("Caps", 1)
-    # @test_throws ArgumentError("argument is not a valid `Legolas.Schema` name: \"question?\"") Schema("question?", 1)
-
-
-
-    # msg = declaration_error_message("has_underscore", "ArgumentError: argument is not a valid `Legolas.Schema` name: \"has_underscore\"")
-    # @test_throws(Legolas.SchemaDeclarationError(msg), @schema("has_underscore", x))
-
-    # msg = declaration_error_message("Caps", "ArgumentError: argument is not a valid `Legolas.Schema` name: \"Caps\"")
-    # @test_throws(Legolas.SchemaDeclarationError(msg), @schema("Caps", x))
-
-    # msg = declaration_error_message("Caps", "ArgumentError: argument is not a valid `Legolas.Schema` name: \"Caps\"")
-    # @test_throws(Legolas.SchemaDeclarationError(msg), @schema("Caps", x))
-
-    # for bad_name in ("has_underscore",
-    #                  "Caps",
-    #                  "question?")
-    #     @test_throws ArgumentError("argument is not a valid `Legolas.Schema` name: \"$bad_name\"") Schema(bad_name, 1)
-    #     for bad_expr in ("$bad_name@1",
-    #                      Expr(:call, :(>), "$bad_name@1", "parent@1"),
-    #                      Expr(:call, :(>), "child@1", "$bad_name@1"))
-    #         msg = "Error encountered attempting to parse first argument provided to `@schema`.\n" *
-    #               "Received: $bad_expr\n" *
-    #               "Encountered: ArgumentError: argument is not a valid `Legolas.Schema` name: \"$bad_name\""
-    #         @eval @test_throws Legolas.SchemaDeclarationError($msg) @schema($bad_expr, x)
-    #     end
-    # end
-
-    # for bad_string in (">bad.prefix",
-    #                    "bad.suffix>",
-    #                    "oops.oops@-1",
-    #                    "child.oops@1>parent.oops@1")
-    #     @test_throws ArgumentError("argument is not a valid `Legolas.Schema` string: \"$bad_string\"") Schema(bad_string)
-    #     for bad_expr in (bad_string,
-    #                      Expr(:call, :(>), bad_string, "parent@1"),
-    #                      Expr(:call, :(>), "child@1", bad_string))
-    #         msg = "Error encountered attempting to parse first argument provided to `@schema`.\n" *
-    #               "Received: $bad_expr\n" *
-    #               "Encountered: ArgumentError: argument is not a valid `Legolas.Schema` string: \"$bad_string\""
-    #         @eval @test_throws Legolas.SchemaDeclarationError($msg) @schema($bad_expr, x)
-    #     end
-    # end
-
+    for good in good_schema_names, bad in bad_schema_names
+        for id in ("$good@3>$bad@2",
+                   "$bad@1>bob@0>$good@3",
+                   "bob@1>$bad@0>$good@3",
+                   "$good@1>bob@0>$bad@3")
+            @test_throws ArgumentError(bad_name_message(bad)) Legolas.parse_schema_identifier(id)
+            @test_throws SchemaDeclarationError(bad_schema_declaration_message(id, bad_name_message(bad))) @eval(@schema($id))
+        end
+    end
 end
 
+@alias("bob", B)
+
+@testset "Legolas.@alias" begin
+    @test B{3} == Schema{:bob,3}
+    @test B(3) == Schema{:bob,3}()
+    @test_throws ErrorException("invocations of `B` must specify a schema version integer; instead of `B()`, "*
+                                "try `B(v)` where `v` is an appropriate schema version integer") B()
+    @test_throws ErrorException("invalid redefinition of constant B") @eval(@alias("joe", B))
+    joe = "joe"
+    @test_throws ArgumentError("`schema_name` provided to `@alias` must be a string literal") @alias(joe, J)
+    @test_throws ArgumentError("`schema_name` provided to `@alias` should not include an `@` version clause") @alias("joe@1", J)
+    @test_throws ArgumentError("`schema_name` provided to `@alias` is not a valid `Legolas.Schema` name: \"joe?\"") @alias("joe?", J)
+end
+
+@testset "Legolas.@schema" begin
+    @test_throws SchemaDeclarationError("no required fields declared") @schema("name@1")
+    id = "name@1"
+    @test_throws SchemaDeclarationError("schema identifier must be a string literal") @schema(id, x)
+    @test_throws SchemaDeclarationError("schema identifier should specify at most one parent, found multiple: " *
+                                        "Schema[Schema(\"bob\", 1), Schema(\"dave\", 1), Schema(\"joe\", 1)]") @schema("bob@1 > dave@1 > joe@1", x)
+    @test_throws SchemaDeclarationError("cannot have duplicate field names in `@schema` declaration; recieved: [:x, :y, :x, :z]") @schema("name@1", x, y, x, z)
+end
+
+
+#=
 
 ########################
 ########################
@@ -466,3 +337,4 @@ end
     roundtripped_table = Legolas.read(Legolas.tobuffer(table, Legolas.Schema("my-outer-schema@1")))
     @test table == (r -> Legolas.row(Legolas.Schema("my-outer-schema@1"), r)).(Tables.rows(roundtripped_table))
 end
+=#

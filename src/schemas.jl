@@ -81,7 +81,7 @@ function parse_schema_identifier(x::AbstractString)
             version isa Int && push!(schemas, Schema(name, version))
         end
     end
-    invalid && throw(ArgumentError("failed to parse seemingly invalid/malformed schema identifier string: \"$x\""))
+    (invalid || isempty(schemas)) && throw(ArgumentError("failed to parse seemingly invalid/malformed schema identifier string: \"$x\""))
     return schemas
 end
 
@@ -100,16 +100,16 @@ Define a convenience type alias of the form:
 especially the inclusion of the schema version integer `v` in every direct invocation.
 """
 macro alias(schema_name, T)
-    schema_name isa String || throw(ArgumentError("`schema_name` provided to `@alias` must be a string literal"))
-    occursin('@', schema_name) && throw(ArgumentError("`schema_name` provided to `@alias` should not include an `@` version clause"))
-    is_valid_schema_name(schema_name) || throw(ArgumentError("`schema_name` provided to `@alias` is not a valid `Legolas.Schema` name: \"$name\""))
+    schema_name isa String || return :(throw(ArgumentError("`schema_name` provided to `@alias` must be a string literal")))
+    occursin('@', schema_name) && return :(throw(ArgumentError("`schema_name` provided to `@alias` should not include an `@` version clause")))
+    is_valid_schema_name(schema_name) || return :(throw(ArgumentError("`schema_name` provided to `@alias` is not a valid `Legolas.Schema` name: \"" * $schema_name * "\"")))
     schema_symbol = Base.Meta.quot(Symbol(schema_name))
     version_symbol = esc(:v)
     quoted_T = Base.Meta.quot(T)
     T = esc(T)
     return quote
         const $T{$version_symbol} = Legolas.Schema{$schema_symbol,$version_symbol}
-        $T(v::Integer) = Legolas.Schema{$schema_symbol,v}()
+        @inline $T(v::Integer) = Legolas.Schema{$schema_symbol,v}()
         $T() = error("invocations of `", $quoted_T, "` must specify a schema version integer; instead of `", $quoted_T,
                      "()`, try `", $quoted_T, "(v)` where `v` is an appropriate schema version integer")
     end
@@ -294,17 +294,6 @@ function Base.showerror(io::IO, e::SchemaDeclarationError)
               """)
 end
 
-# function _parse_schema_expr(x)
-#     if x isa Expr && x.head == :call && x.args[1] == :> && length(x.args) == 3
-#         child, _ = _parse_schema_expr(x.args[2])
-#         parent, _ = _parse_schema_expr(x.args[3])
-#         return child, parent
-#     end
-#     return nothing, nothing
-# end
-
-# _parse_schema_expr(str::AbstractString) = Schema(str), nothing
-
 function _normalize_field(f)
     original_f = f
     f isa Symbol && (f = Expr(:(::), f, :Any))
@@ -376,13 +365,13 @@ macro schema(id, field_exprs...)
     elseif length(schemas) == 2
         schema, parent = schemas[1], schemas[2]
     else
-        return :(throw(SchemaDeclarationError("schema identifier should specify at most one parent, found multiple: $schemas")))
+        return :(throw(SchemaDeclarationError(string("schema identifier should specify at most one parent, found multiple: ", $schemas))))
     end
 
     isempty(field_exprs) && return :(throw(SchemaDeclarationError("no required fields declared")))
     fields = [(name=stmt.args[1].args[1], type=stmt.args[1].args[2], statement=stmt)
               for stmt in map(_normalize_field, field_exprs)]
-    allunique(f.name for f in fields) || return :(throw(SchemaDeclarationError("duplicate field names in declarations TODO")))
+    allunique(f.name for f in fields) || return :(throw(SchemaDeclarationError(string("cannot have duplicate field names in `@schema` declaration; recieved: ", $([f.name for f in fields])))))
     field_names_types = Expr(:tuple, (:($(f.name) = $(f.type)) for f in fields)...)
 
     quoted_schema = Base.Meta.quot(schema)
