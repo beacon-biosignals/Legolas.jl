@@ -1,5 +1,4 @@
-using Legolas, Test, DataFrames, Arrow
-
+using Legolas, Test, DataFrames, Arrow, UUIDs
 using Legolas: Schema, @schema, @alias, row, SchemaDeclarationError
 
 include(joinpath(dirname(@__DIR__), "examples", "tour.jl"))
@@ -202,6 +201,10 @@ end
 
 @schema("test.grandchild@1 > test.child@1", a::Int32 = round(Int32, a), y::String = string(y[1:2]))
 @alias("test.grandchild", Grandchild)
+
+# this statement will induce an error if field types are not properly escaped,
+# since `UUID` will be hygeine-passed to `Legolas.UUID`, which is undefined
+@schema("test.field-type-escape@1", x::UUID)
 
 @testset "`Legolas.@schema` and associated utilities for declared `Legolas.Schema`s" begin
     @testset "Legolas.SchemaDeclarationError" begin

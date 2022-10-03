@@ -452,7 +452,7 @@ macro schema(id, field_exprs...)
         push!(fields, (name=stmt.args[1].args[1], type=stmt.args[1].args[2], statement=stmt))
     end
     allunique(f.name for f in fields) || return :(throw(SchemaDeclarationError(string("cannot have duplicate field names in `@schema` declaration; recieved: ", $([f.name for f in fields])))))
-    field_names_types = Expr(:tuple, (:($(f.name) = $(f.type)) for f in fields)...)
+    field_names_types = Expr(:tuple, (:($(f.name) = $(esc(f.type))) for f in fields)...)
 
     quoted_schema = Base.Meta.quot(schema)
     quoted_schema_type = Base.Meta.quot(typeof(schema))
