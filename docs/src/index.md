@@ -11,16 +11,17 @@ CurrentModule = Legolas
 ## Legolas `Schema`s
 
 ```@docs
-Legolas.@schema
 Legolas.Schema
+Legolas.@schema
 Legolas.is_valid_schema_name
+Legolas.parse_schema_identifier
 Legolas.schema_name
 Legolas.schema_version
 Legolas.schema_identifier
 Legolas.schema_parent
 Legolas.schema_fields
 Legolas.schema_declaration
-Legolas.parse_schema_identifier
+Legolas.schema_declared
 Legolas.row
 ```
 

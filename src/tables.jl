@@ -12,7 +12,16 @@ function _columns(table)
 end
 
 """
-    TODO
+    Legolas.guess_schema(table)
+
+Returns a `Table.Schema` matching the provided `table` if such a `Tables.Schema` can
+be determined, otherwise return `nothing`.
+
+This function is similar to `Tables.schema(table)`, but may undertake additional work to
+more aggressively attempt to determine a matching `Table.Schema`, even when it might not
+be directly evident from `typeof(table)`.
+
+Specifically, this function may call `Tables.columns(table)` as a preprocessing step.
 """
 function guess_schema(table)
     columns = _columns(table)
@@ -72,7 +81,7 @@ function _iterator_for_column(table, c)
 end
 
 """
-    gather(column_name, tables...; extract=((table, idxs) -> view(table, idxs, :)))
+    Legolas.gather(column_name, tables...; extract=((table, idxs) -> view(table, idxs, :)))
 
 Gather rows from `tables` into a unified cross-table index along `column_name`. Returns
 a `Dict` whose keys are the unique values of `column_name` across `tables`, and whose
@@ -96,7 +105,7 @@ function gather(column_name, tables::Vararg{Any,N};
 end
 
 """
-    materialize(table)
+    Legolas.materialize(table)
 
 Return a fully deserialized copy of `table`.
 

@@ -4,7 +4,7 @@
 
     If you're a newcomer to Legolas.jl, please familiarize yourself with the [tour](https://github.com/beacon-biosignals/Legolas.jl/blob/main/examples/tour.jl) before diving into this documentation.
 
-## Schema Identifiers
+## [Schema Identifiers](@id schema_identifier_specification)
 
 Legolas defines "schema identifiers" as strings of the form:
 

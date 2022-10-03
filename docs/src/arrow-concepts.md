@@ -12,7 +12,7 @@ Legolas defines a special field `legolas_schema_qualified` that Legolas-aware Ar
 
 Arrow tables which include this field are considered to "support Legolas schema discovery" and are referred to as "Legolas-discoverable", since Legolas consumers may employ this field to automatically match the table against available application-layer Legolas schema definitions.
 
-If present, the `legolas_schema_qualified` field's value must be a [fully qualified schema identifier](TODO).
+If present, the `legolas_schema_qualified` field's value must be a [fully qualified schema identifier](@ref schema_identifier_specification).
 
 ## Arrow File Naming Conventions
 
