@@ -129,7 +129,7 @@ fields = (a=1.0, b="hi", c=π, d=[1, 2, 3])
 # assignments in the schema's declaration. The `example.foo@1` schema declaration doesn't feature
 # any such assignments, so let's declare a new schema `example.bar@1` that does:
 @schema("example.bar@1",
-        x::Union{Int8,Missing} = ismissing(x) ? x : clamp(x, Int8),
+        x::Union{Int8,Missing} = ismissing(x) ? x : Int8(clamp(x, -128:127)),
         y::String = string(y),
         z::String = ismissing(z) ? string(y, '_', x) : z)
 @alias("example.bar", Bar)
