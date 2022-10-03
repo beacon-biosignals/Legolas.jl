@@ -212,7 +212,7 @@ end
         @test_throws SchemaDeclarationError("schema identifier must be a string literal") @schema(id, x)
         @test_throws SchemaDeclarationError("schema identifier should specify at most one parent, found multiple: " *
                                             "Schema[Schema(\"bob\", 1), Schema(\"dave\", 1), Schema(\"joe\", 1)]") @schema("bob@1 > dave@1 > joe@1", x)
-        @test_throws SchemaDeclarationError("cannot have duplicate field names in `@schema` declaration; recieved: [:x, :y, :x, :z]") @schema("name@1", x, y, x, z)
+        @test_throws SchemaDeclarationError("cannot have duplicate field names in `@schema` declaration; recieved: $([:x, :y, :x, :z])") @schema("name@1", x, y, x, z)
         @test_throws SchemaDeclarationError("parent schema cannot be used before it has been declared: Schema(\"test.parent\", 2)") @schema("test.child@2 > test.parent@2", x)
         @test_throws SchemaDeclarationError("declared field types violate parent schema's field types") @schema("new@1 > test.parent@1", y::Int)
         @test_throws SchemaDeclarationError("declared field types violate parent schema's field types") @schema("new@1 > test.child@1", y::Int)
@@ -273,7 +273,7 @@ end
 
         t = Tables.Schema((:x, :a, :y), (ComplexF64, Int32, String))
         for s in (Grandchild(1), Child(1), Parent(1))
-            @test_throws ArgumentError("field `x` has unexpected type; expected <:$(Vector), found ComplexF64") Legolas.validate(t, s)
+            @test_throws ArgumentError("field `x` has unexpected type; expected <:$(Vector), found $(Complex{Float64})") Legolas.validate(t, s)
             @test !Legolas.complies_with(t, s)
             @test isequal(Legolas.find_violation(t, s), :x => ComplexF64)
         end
