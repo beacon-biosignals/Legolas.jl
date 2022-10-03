@@ -1,29 +1,34 @@
 # API Documentation
 
-If you're a newcomer to Legolas.jl, please familiarize yourself with via the [tour](https://github.com/beacon-biosignals/Legolas.jl/blob/master/examples/tour.jl) before diving into this documentation.
+!!! note
+
+    If you're a newcomer to Legolas.jl, please familiarize yourself with the [tour](https://github.com/beacon-biosignals/Legolas.jl/blob/main/examples/tour.jl) before diving into this documentation.
 
 ```@meta
 CurrentModule = Legolas
 ```
 
-## Legolas `Schema`s and `Row`s
+## Legolas `Schema`s
 
 ```@docs
-Legolas.@row
-Legolas.Row
 Legolas.Schema
+Legolas.@schema
 Legolas.is_valid_schema_name
+Legolas.parse_schema_identifier
 Legolas.schema_name
 Legolas.schema_version
-Legolas.schema_qualified_string
+Legolas.schema_identifier
 Legolas.schema_parent
+Legolas.schema_fields
+Legolas.schema_declaration
+Legolas.schema_declared
+Legolas.row
 ```
 
 ## Validating/Writing/Reading Legolas Tables
 
 ```@docs
-Legolas.extract_schema
-Legolas.validate
+Legolas.extract_legolas_schema
 Legolas.write
 Legolas.read
 ```
@@ -33,6 +38,7 @@ Legolas.read
 ```@docs
 Legolas.lift
 Legolas.construct
+Legolas.guess_schema
 Legolas.assign_to_table_metadata!
 Legolas.gather
 Legolas.locations
