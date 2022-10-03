@@ -138,7 +138,7 @@ fields = (a=1.0, b="hi", c=π, d=[1, 2, 3])
 # definition, which becomes roughly equivalent to:
 #
 #   function Legolas.row(::Bar{1}; x=missing, y=missing, __extra__...)
-#       x::Union{Int8,Missing} = ismissing(x) ? x : clamp(x, Int8)
+#       x::Union{Int8,Missing} = ismissing(x) ? x : Int8(clamp(x, -128:127))
 #       y::String = string(y, '_', x)
 #       return (; x, y, __extra__...)
 #   end
