@@ -270,7 +270,7 @@ end
 
         t = Tables.Schema((:x, :a, :y), (ComplexF64, Int32, String))
         for s in (Grandchild(1), Child(1), Parent(1))
-            @test_throws ArgumentError("field `x` has unexpected type; expected <:Vector{T} where T, found ComplexF64") Legolas.validate(t, s)
+            @test_throws ArgumentError("field `x` has unexpected type; expected <:$(Vector), found ComplexF64") Legolas.validate(t, s)
             @test !Legolas.complies_with(t, s)
             @test isequal(Legolas.find_violation(t, s), :x => ComplexF64)
         end
