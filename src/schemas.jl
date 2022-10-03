@@ -87,7 +87,7 @@ function parse_schema_identifier(id::AbstractString)
             version isa Int && push!(schemas, Schema(name, version))
         end
     end
-    (invalid || isempty(schemas)) && throw(ArgumentError("failed to parse seemingly invalid/malformed schema identifier string: \"$x\""))
+    (invalid || isempty(schemas)) && throw(ArgumentError("failed to parse seemingly invalid/malformed schema identifier string: \"$id\""))
     return schemas
 end
 
