@@ -14,67 +14,68 @@ Valid schema names are lowercase, alphanumeric, and may contain hyphens or perio
 is_valid_schema_name(x::AbstractString) = all(i -> i in ALLOWED_SCHEMA_NAME_CHARACTERS, x)
 
 #####
-##### `Schema`
+##### `SchemaVersion`
 #####
 
 """
-    Legolas.Schema{name,version}
+    Legolas.SchemaVersion{name,version}
 
-A type representing a Legolas schema. The `name` (a `Symbol`) and `version` (an `Integer`)
-are surfaced as type parameters, allowing them to be utilized for dispatch.
+A type representing a particular version of Legolas schema. The relevant `name` (a `Symbol`)
+and `version` (an `Integer`) are surfaced as type parameters, allowing them to be utilized for
+dispatch.
 
 For more details and examples, please see `Legolas.jl/examples/tour.jl` and the
 "Schema-Related Concepts/Conventions" section of the Legolas.jl documentation.
 
-The constructor `Schema{name,version}()` will throw an `ArgumentError` if `version` is not
-non-negative.
+The constructor `SchemaVersion{name,version}()` will throw an `ArgumentError` if `version` is
+not non-negative.
 
 See also: [`Legolas.@schema`](@ref)
 """
-struct Schema{name,version}
-    function Schema{name,version}() where {name,version}
-        version isa Integer && version >= 0 || throw(ArgumentError("`version` in `Schema{_,version}` must be a non-negative integer, received: $version"))
-        return new{name,version}()
+struct SchemaVersion{n,v}
+    function SchemaVersion{n,v}() where {n,v}
+        v isa Integer && v >= 0 || throw(ArgumentError("`version` in `SchemaVersion{_,version}` must be a non-negative integer, received: $v"))
+        return new{n,v}()
     end
 end
 
 """
-    Legolas.Schema(name::AbstractString, version::Integer)
+    Legolas.SchemaVersion(name::AbstractString, version::Integer)
 
-Return `Legolas.Schema{Symbol(name),version}()`.
+Return `Legolas.SchemaVersion{Symbol(name),version}()`.
 
 Throws an `ArgumentError` if `name` is not a valid schema name.
 
-Prefer using this constructor over `Legolas.Schema{Symbol(name),version}()` directly.
+Prefer using this constructor over `Legolas.SchemaVersion{Symbol(name),version}()` directly.
 """
-function Schema(name::AbstractString, version::Integer)
-    is_valid_schema_name(name) || throw(ArgumentError("argument is not a valid `Legolas.Schema` name: \"$name\""))
-    return Schema{Symbol(name),version}()
+function SchemaVersion(n::AbstractString, v::Integer)
+    is_valid_schema_name(n) || throw(ArgumentError("argument is not a valid `Legolas.SchemaVersion` name: \"$n\""))
+    return SchemaVersion{Symbol(n),v}()
 end
 
-Schema(schema::Schema) = schema
+SchemaVersion(sv::SchemaVersion) = sv
 
 #####
-##### `parse_schema_identifier`
+##### `parse_identifier`
 #####
 
 """
-    Legolas.parse_schema_identifier(id::AbstractString)
+    Legolas.parse_identifier(id::AbstractString)
 
-Given a valid schema identifier `id` of the form:
+Given a valid schema version identifier `id` of the form:
 
     \$(names[1])@\$(versions[1]) > \$(names[2])@\$(versions[2]) > ... > \$(names[n])@\$(versions[n])
 
-return an `n` element `Vector{Schema}` whose `i`th element is `Schema(names[i], versions[i])`.
+return an `n` element `Vector{SchemaVersion}` whose `i`th element is `SchemaVersion(names[i], versions[i])`.
 
-Throws an `ArgumentError` if the provided string is not a valid schema identifier.
+Throws an `ArgumentError` if the provided string is not a valid schema version identifier.
 
-For details regarding valid schema identifiers and their structure, see the
+For details regarding valid schema version identifiers and their structure, see the
 "Schema-Related Concepts/Conventions" section of the Legolas.jl documentation.
 """
-function parse_schema_identifier(id::AbstractString)
+function parse_identifier(id::AbstractString)
     name_and_version_per_schema = [split(strip(x), '@') for x in split(id, '>')]
-    schemas = Schema[]
+    results = SchemaVersion[]
     invalid = isempty(name_and_version_per_schema)
     if !invalid
         for nv in name_and_version_per_schema
@@ -82,47 +83,13 @@ function parse_schema_identifier(id::AbstractString)
                 invalid = true
                 break
             end
-            name, version = nv
-            version = tryparse(Int, version)
-            version isa Int && push!(schemas, Schema(name, version))
+            n, v = nv
+            v = tryparse(Int, v)
+            v isa Int && push!(results, SchemaVersion(n, v))
         end
     end
-    (invalid || isempty(schemas)) && throw(ArgumentError("failed to parse seemingly invalid/malformed schema identifier string: \"$id\""))
-    return schemas
-end
-
-#####
-##### `@alias`
-#####
-
-"""
-    Legolas.@alias(schema_name, T)
-
-Define a convenience type alias of the form:
-
-    const T{v} = Legolas.Schema{Symbol(schema_name),v}
-
-...and the constructor:
-
-    T(v::Integer) = Legolas.Schema{Symbol(schema_name),v}
-
-...along with some default behaviors that encourage proper usage by downstream callers,
-especially the inclusion of the schema version integer `v` in every direct invocation.
-"""
-macro alias(schema_name, T)
-    schema_name isa String || return :(throw(ArgumentError("`schema_name` provided to `@alias` must be a string literal")))
-    occursin('@', schema_name) && return :(throw(ArgumentError("`schema_name` provided to `@alias` should not include an `@` version clause")))
-    is_valid_schema_name(schema_name) || return :(throw(ArgumentError("`schema_name` provided to `@alias` is not a valid `Legolas.Schema` name: \"" * $schema_name * "\"")))
-    schema_symbol = Base.Meta.quot(Symbol(schema_name))
-    version_symbol = esc(:v)
-    quoted_T = Base.Meta.quot(T)
-    T = esc(T)
-    return quote
-        const $T{$version_symbol} = Legolas.Schema{$schema_symbol,$version_symbol}
-        @inline $T(v::Integer) = Legolas.Schema{$schema_symbol,v}()
-        $T() = error("invocations of `", $quoted_T, "` must specify a schema version integer; instead of `", $quoted_T,
-                     "()`, try `", $quoted_T, "(v)` where `v` is an appropriate schema version integer")
-    end
+    (invalid || isempty(results)) && throw(ArgumentError("failed to parse seemingly invalid/malformed schema version identifier string: \"$id\""))
+    return results
 end
 
 #####
@@ -130,16 +97,20 @@ end
 #####
 
 struct UnknownSchemaError <: Exception
-    schema::Legolas.Schema
+    name::String
+    version::Union{Int,Nothing}
 end
 
+UnknownSchemaError(sv::SchemaVersion) = UnknownSchemaError(name(sv), version(sv))
+
 function Base.showerror(io::IO, e::UnknownSchemaError)
+    print(io, "UnknownSchemaError: encountered unknown Legolas schema with name=\"$(e.name)\"")
+    isnothing(e.version) || print(io, ", version=$(e.version)")
     print(io, """
-              UnknownSchemaError: encountered unknown `Legolas.Schema` type: $(e.schema)
 
               This generally indicates that this schema has not been declared (i.e.
-              the schema's corresponding `@schema` statement has not been executed) in
-              the current Julia session.
+              the corresponding `@schema` and/or `@version` statements have not been
+              executed) in the current Julia session.
 
               In practice, this can arise if you try to read a Legolas table with a
               prescribed schema, but haven't actually loaded the schema definition
@@ -154,177 +125,164 @@ function Base.showerror(io::IO, e::UnknownSchemaError)
 end
 
 #####
-##### `Schema` accessors/generators
+##### `SchemaVersion` accessors
 #####
 
 """
-    Legolas.schema_name(::Legolas.Schema{name})
+    Legolas.name(::Legolas.SchemaVersion{n})
 
-Return `name`.
+Return `n`.
 """
-@inline schema_name(::Schema{name}) where {name} = name
-
-"""
-    Legolas.schema_version(::Legolas.Schema{name,version})
-
-Return `version`.
-"""
-@inline schema_version(::Schema{name,version}) where {name,version} = version
+@inline name(::SchemaVersion{n}) where {n} = n
 
 """
-    Legolas.schema_parent(::Legolas.Schema)
+    Legolas.version(::Legolas.SchemaVersion{n,v})
 
-Return the `Legolas.Schema` instance that corresponds to the parent of the given `Legolas.Schema`.
+Return `v`.
 """
-@inline schema_parent(::Schema) = nothing
+@inline version(::SchemaVersion{n,v}) where {n,v} = v
 
 """
-    Legolas.schema_declared(schema::Legolas.Schema{name,version})
+    Legolas.parent(sv::Legolas.SchemaVersion)
 
-Return `true` if the schema `name@version` has been declared via `@schema` in the current Julia
+Return the `Legolas.SchemaVersion` instance that corresponds to `sv`'s declared parent.
+"""
+@inline parent(::SchemaVersion) = nothing
+
+"""
+    Legolas.declared(sv::Legolas.SchemaVersion{name,version})
+
+Return `true` if the schema version `name@version` has been declared via `@version` in the current Julia
 session; return `false` otherwise.
 """
-@inline schema_declared(::Schema) = false
+@inline declared(::SchemaVersion) = false
 
 """
-    Legolas.schema_identifier(::Legolas.Schema)
+    Legolas.identifier(::Legolas.SchemaVersion)
 
-Return this `Legolas.Schema`'s fully qualified schema identifier. This string is serialized
+Return this `Legolas.SchemaVersion`'s fully qualified schema version identifier. This string is serialized
 as the `\"$LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY\"` field value in table metadata for table
 written via [`Legolas.write`](@ref).
 """
-schema_identifier(schema::Schema) = throw(UnknownSchemaError(schema))
+identifier(sv::SchemaVersion) = throw(UnknownSchemaError(sv))
 
 """
-    Legolas.schema_fields(schema::Legolas.Schema)
+    Legolas.required_fields(sv::Legolas.SchemaVersion)
 
 Return a `NamedTuple{...,Tuple{Vararg{DataType}}` whose fields take the form:
 
-    <name of field required by schema> = <field's type>
+    <name of field required by `sv`> = <field's type>
 
-If `schema` has a parent, the returned fields will include `schema_fields(schema_parent(schema))`.
+If `sv` has a parent, the returned fields will include `required_fields(parent(sv))`.
 """
-schema_fields(schema::Schema) = throw(UnknownSchemaError(schema))
+required_fields(sv::SchemaVersion) = throw(UnknownSchemaError(sv))
 
 """
-    Legolas.schema_declaration(schema::Legolas.Schema)
+    Legolas.declaration(sv::Legolas.SchemaVersion)
 
-Return a `Pair{String,Dict{Symbol,Expr}}` of the form
+Return a `Pair{String,Vector{Pair{Symbol,NamedTuple}}}` of the form
 
-    schema_identifier_used_for_declaration::String => required_field_expressions::Dict{Symbol,Expr}
+    schema_identifier_used_for_declaration::String => required_fields::Vector{Pair{Symbol,NamedTuple}}
 
-where each key-value pair in `required_field_expressions` takes the form:
+where each key-value pair in `required_fields` takes the form:
 
+    TODO the RHS here should actually be the `NamedTuple`s emitted by `_normalize_field!`
     required_field_name::Symbol => normalized_required_field_assignment_statement::Expr
 
-Note that `schema_declaration` is primarily intended to be used for interactive discovery purposes, and
-does not include the contents of `schema_declaration(schema_parent(schema))`.
+Note that `declaration` is primarily intended to be used for interactive discovery purposes, and
+does not include the contents of `declaration(parent(sv))`.
 """
-schema_declaration(schema::Schema) = throw(UnknownSchemaError(schema))
-
-#####
-##### `Schema` printing
-#####
-
-Base.show(io::IO, schema::Schema) = print(io, "Schema(\"$(schema_name(schema))\", $(schema_version(schema)))")
-
-#####
-##### `Schema` Arrow (de)serialization
-#####
-
-# support (de)serialization of Schemas to Arrow
-const LEGOLAS_SCHEMA_ARROW_NAME = Symbol("JuliaLang.Legolas.Schema")
-Arrow.ArrowTypes.arrowname(::Type{<:Schema}) = LEGOLAS_SCHEMA_ARROW_NAME
-Arrow.ArrowTypes.ArrowType(::Type{<:Schema}) = String
-Arrow.ArrowTypes.toarrow(schema::Schema) = schema_identifier(schema)
-Arrow.ArrowTypes.JuliaType(::Val{LEGOLAS_SCHEMA_ARROW_NAME}, ::Any) = Schema
-Arrow.ArrowTypes.fromarrow(::Type{<:Schema}, qualified_string) = first(parse_schema_identifier(qualified_string))
+declaration(sv::SchemaVersion) = throw(UnknownSchemaError(sv))
 
 #####
 ##### `Tables.Schema` validation
 #####
 
+accepted_field_type(::SchemaVersion, T::DataType) = T
+accepted_field_type(::SchemaVersion, ::Type{UUID}) = Union{UUID,UInt128}
+
 """
-    Legolas.find_violation(tables_schema::Tables.Schema, legolas_schema::Legolas.Schema)
+    Legolas.find_violation(ts::Tables.Schema, sv::Legolas.SchemaVersion)
 
-For required field `f::F` of `legolas_schema`:
+For required field `f::F` of `sv`:
 
-- If `f::T` is present in `tables_schema`, ensure that `T <: F` or else immediately return `f::Symbol => T::DataType`.
-- If `f` isn't present in `tables_schema`, ensure that `Missing <: F` or else immediately return `f::Symbol => missing::Missing`.
+- Define `A = Legolas.accepted_field_type(F)`
+- If `f::T` is present in `ts`, ensure that `T <: A` or else immediately return `f::Symbol => T::DataType`.
+- If `f` isn't present in `ts`, ensure that `Missing <: A` or else immediately return `f::Symbol => missing::Missing`.
 
 Otherwise, return `nothing`.
 
 See also: [`Legolas.validate`](@ref), [`Legolas.complies_with`](@ref)
 """
-find_violation(::Tables.Schema, schema::Schema) = throw(UnknownSchemaError(schema))
+find_violation(::Tables.Schema, sv::SchemaVersion) = throw(UnknownSchemaError(sv))
 
 function _find_violation end
 
 """
-    Legolas.validate(tables_schema::Tables.Schema, legolas_schema::Legolas.Schema)
+    Legolas.validate(ts::Tables.Schema, sv::Legolas.SchemaVersion)
 
-Throws a descriptive `ArgumentError` if `!isnothing(find_violation(tables_schema, legolas_schema))`,
+Throws a descriptive `ArgumentError` if `!isnothing(find_violation(ts, sv))`,
 otherwise return `nothing`.
 
 See also: [`Legolas.find_violation`](@ref), [`Legolas.complies_with`](@ref)
 """
-function validate(tables_schema::Tables.Schema, legolas_schema::Schema)
-    result = find_violation(tables_schema, legolas_schema)
+function validate(ts::Tables.Schema, sv::SchemaVersion)
+    result = find_violation(ts, sv)
     isnothing(result) && return nothing
     field, violation = result
-    ismissing(violation) && throw(ArgumentError("could not find expected field `$field` in $tables_schema"))
-    expected = getfield(schema_fields(legolas_schema), field)
+    ismissing(violation) && throw(ArgumentError("could not find expected field `$field` in $ts"))
+    expected = getfield(schema_fields(sv), field)
     throw(ArgumentError("field `$field` has unexpected type; expected <:$expected, found $violation"))
 end
 
 """
-    Legolas.complies_with(tables_schema::Tables.Schema, legolas_schema::Legolas.Schema)
+    Legolas.complies_with(ts::Tables.Schema, sv::Legolas.SchemaVersion)
 
-Return `isnothing(find_violation(tables_schema, legolas_schema))`.
+Return `isnothing(find_violation(ts, sv))`.
 
 See also: [`Legolas.find_violation`](@ref), [`Legolas.validate`](@ref)
 """
-complies_with(tables_schema::Tables.Schema, legolas_schema::Schema) = isnothing(find_violation(tables_schema, legolas_schema))
-
-#####
-##### `row`
-#####
-
-"""
-    Legolas.row(schema::Schema; fields...)
-    Legolas.row(schema::Schema, fields)
-
-Return a `Tables.AbstractRow`-compliant value whose contents are provided by `fields` and
-validated/transformed in accordance with `schema`. If the non-keyword-arguments-based method
-is used, `fields` must be a `Tables.AbstractRow`-compliant value.
-
-For more details and examples, please see `Legolas.jl/examples/tour.jl`.
-"""
-row(schema::Schema; fields...) = throw(UnknownSchemaError(schema))
-row(schema::Schema, fields::NamedTuple) = row(schema; fields...)
-row(schema::Schema, fields) = row(schema, NamedTuple(Tables.Row(fields)))
-
-function _row end
+complies_with(ts::Tables.Schema, sv::SchemaVersion) = isnothing(find_violation(ts, sv))
 
 #####
 ##### `@schema`
 #####
 
-struct SchemaDeclarationError <: Exception
+"""
+    TODO
+"""
+schema_type_prefix(::Val{n}) where {n} = throw(UnknownSchemaError(n, nothing))
+
+macro schema(schema_name, schema_prefix)
+    schema_name isa String || return :(throw(ArgumentError("`schema_name` provided to `@schema` must be a string literal")))
+    occursin('@', schema_name) && return :(throw(ArgumentError("`schema_name` provided to `@schema` should not include an `@` version clause")))
+    is_valid_schema_name(schema_name) || return :(throw(ArgumentError("`schema_name` provided to `@schema` is not a valid `Legolas.SchemaVersion` name: \"" * $schema_name * "\"")))
+    schema_prefix isa Symbol || return :(throw(ArgumentError("TODO")))
+    schema_symbol = Base.Meta.quot(Symbol(schema_name))
+    return quote
+        Legolas.schema_type_prefix(::Val{$(schema_symbol)}) = $(Base.Meta.quot(schema_prefix))
+    end
+end
+
+#####
+##### `@version`
+#####
+
+struct SchemaVersionDeclarationError <: Exception
     message::String
 end
 
-function Base.showerror(io::IO, e::SchemaDeclarationError)
+function Base.showerror(io::IO, e::SchemaVersionDeclarationError)
     print(io, """
-              SchemaDeclarationError: $(e.message)
+              SchemaVersionDeclarationError: $(e.message)
 
-              Note that valid `@schema` declarations meet these expecations:
+              Note that valid `@version` declarations meet these expecations:
 
-              - `@schema`'s first argument must be of the form `\"name@X\"` or
+              - `@version`'s first argument must be of the form `\"name@X\"` or
               "`\"name@X > parent@Y\"`, where `name` and `parent` are valid
-              "Legolas schema names.
+              Legolas schema names.
 
-              - `@schema` declarations must list at least one required field,
+              - `@version` declarations must list at least one required field,
               and must not list duplicate fields within the same declaration.
               """)
 end
@@ -334,7 +292,13 @@ function _normalize_field!(f)
     f.head == :(::) && (f = Expr(:(=), f, f.args[1]))
     f.head == :(=) && f.args[1] isa Symbol && (f.args[1] = Expr(:(::), f.args[1], :Any))
     f.head == :(=) && f.args[1].head == :(::) || error("couldn't normalize field expression: $f")
-    return f
+    type = f.args[1].args[2]
+    parameterize = false
+    if type isa Expr && type.head == :(<:)
+        type = type.args[1]
+        parameterize = true
+    end
+    return (name=f.args[1].args[1], type=type, parameterize=parameterize, statement=f)
 end
 
 function _has_valid_child_field_types(child_fields::NamedTuple, parent_fields::NamedTuple)
@@ -349,8 +313,8 @@ end
 _validate_wrt_parent(child_fields::NamedTuple, parent::Nothing) = nothing
 
 function _validate_wrt_parent(child_fields::NamedTuple, parent::Schema)
-    schema_declared(parent) || throw(SchemaDeclarationError("parent schema cannot be used before it has been declared: $parent"))
-    _has_valid_child_field_types(child_fields, schema_fields(parent)) || throw(SchemaDeclarationError("declared field types violate parent schema's field types"))
+    declared(parent) || throw(SchemaDeclarationError("parent schema cannot be used before it has been declared: $parent"))
+    _has_valid_child_field_types(child_fields, required_fields(parent)) || throw(SchemaDeclarationError("declared field types violate parent schema's field types"))
     return nothing
 end
 
@@ -364,109 +328,53 @@ function _check_for_expected_field(schema::Tables.Schema, name::Symbol, ::Type{T
     return nothing
 end
 
-# Note that there exists a clean generic approach for implementing `row` that is applicable
-# to the other Legolas functions that similarly compose child/parent schema behaviors:
-#
-#    function row(schema::Schema; fields...)
-#        parent = schema_parent(schema)
-#        parent isa Schema && (fields = row(parent; fields...))
-#        return _row(schema; fields...)
-#    end
-#
-# However, basic benchmarking as of Julia 1.6 demonstrates that the additional `parent isa Schema`
-# branch in the above approach can induce unnecessary allocations for schemas with a few ancestors,
-# while the approach below (which "hardcodes" the known result of this branch at definition time)
-# does not.
-#
-# Note also that we cannot just interpolate the parent's declared field statements directly
-# into the child's `row` definition, since the parent's field statements may reference bindings
-# from the parent's declaration site that are not available/valid at the child's declaration
-# site.
-
-"""
-    @schema("name@version", field_expressions...)
-    @schema("name@version > parent_name@parent_version", field_expressions...)
-
-Declare a new `Legolas.Schema{name,version}` and overload relevant Legolas method definitions with
-schema-specific behaviors in accordance with the declared schema identifier, parent identifier (if
-present), and required fields.
-
-Each element of `field_expressions` defines a required field for the declared schema, and is an expression
-of the form `field::F = rhs` where:
-
-- `field` is the corresponding field's name
-- `::F` denotes the field's type constraint (if elided, defaults to `::Any`).
-- `rhs` is the expression which produces `field::F` (if elided, defaults to `field`).
-
-Accounting for all of the aforementioned allowed elisions, possible valid forms of elements of
-`field_expressions` include:
-
-- `field::F = rhs`
-- `field::F` (interpreted as `field::F = field`)
-- `field = rhs` (interpreted as `field::Any = rhs`)
-- `field` (interpreted as `field::Any = field`)
-
-Note that:
-
-- A `Legolas.SchemaDeclarationError` will be thrown if:
-    - The provided schema identifier is invalid or is not a string literal
-    - If there are no required field expressions, duplicate required fields are declared, or a given
-      expression is invalid
-    - (if a parent schema is specified) This schema declaration does not comply with its parent's
-      schema declaration, or the parent hasn't yet been declared
-- This macro expects to be evaluated within top-level scope.
-
-For more details and examples, please see `Legolas.jl/examples/tour.jl` and the
-"Schema-Related Concepts/Conventions" section of the Legolas.jl documentation.
-"""
-macro schema(id, field_exprs...)
-    id isa String || return :(throw(SchemaDeclarationError("schema identifier must be a string literal")))
+macro version(id, required_fields)
+    id isa String || return :(throw(SchemaVersionDeclarationError("schema version identifier must be a string literal")))
 
     schemas = nothing
     try
-        schemas = parse_schema_identifier(id)
+        schemas = parse_identifier(id)
     catch err
-        msg = "Error encountered attempting to parse schema identifier.\n" *
+        msg = "Error encountered attempting to parse schema version identifier.\n" *
               "Received: \"$id\"\n" *
               "Encountered: " * sprint(showerror, err)
-        return :(throw(SchemaDeclarationError($msg)))
+        return :(throw(SchemaVersionDeclarationError($msg)))
     end
     if length(schemas) == 1
         schema, parent = first(schemas), nothing
     elseif length(schemas) == 2
         schema, parent = schemas[1], schemas[2]
     else
-        return :(throw(SchemaDeclarationError(string("schema identifier should specify at most one parent, found multiple: ", $schemas))))
+        return :(throw(SchemaVersionDeclarationError(string("schema version identifier should specify at most one parent, found multiple: ", $schemas))))
     end
 
-    isempty(field_exprs) && return :(throw(SchemaDeclarationError("no required fields declared")))
-
+    required_fields isa Expr && required_fields.head == :block && !isempty(required_fields.args) || return :(throw(SchemaVersionDeclarationError("malformed or missing declaration of required fields")))
+    required_fields = [f for f in required_fields.args if !(f isa LineNumberNode)]
     fields = NamedTuple[]
-    for stmt in field_exprs
+    for stmt in required_fields
         original_stmt = Base.Meta.quot(deepcopy(stmt))
         try
-            stmt = _normalize_field!(stmt)
+            push!(fields, _normalize_field!(stmt))
         catch
-            return :(throw(SchemaDeclarationError(string("malformed `@schema` field expression: ", $original_stmt))))
+            return :(throw(SchemaVersionDeclarationError(string("malformed `@schema` field expression: ", $original_stmt))))
         end
-        push!(fields, (name=stmt.args[1].args[1], type=stmt.args[1].args[2], statement=stmt))
     end
-    allunique(f.name for f in fields) || return :(throw(SchemaDeclarationError(string("cannot have duplicate field names in `@schema` declaration; recieved: ", $([f.name for f in fields])))))
+    allunique(f.name for f in fields) || return :(throw(SchemaVersionDeclarationError(string("cannot have duplicate field names in `@schema` declaration; recieved: ", $([f.name for f in fields])))))
     field_names_types = Expr(:tuple, (:($(f.name) = $(esc(f.type))) for f in fields)...)
 
     quoted_schema = Base.Meta.quot(schema)
     quoted_schema_type = Base.Meta.quot(typeof(schema))
     quoted_parent = Base.Meta.quot(parent)
 
-    qualified_string = string(schema_name(schema), '@', schema_version(schema))
+    qualified_string = string(name(schema), '@', version(schema))
     declared_string = qualified_string
     total_schema_fields = field_names_types
     parent_row_invocation = nothing
     parent_find_violation_invocation = nothing
     if !isnothing(parent)
-        qualified_string = :(string($qualified_string, '>', Legolas.schema_identifier($quoted_parent)))
-        declared_string = string(declared_string, '>', schema_name(parent), '@', schema_version(parent))
-        total_schema_fields = :(merge(Legolas.schema_fields($quoted_parent), $total_schema_fields))
+        qualified_string = :(string($qualified_string, '>', Legolas.identifier($quoted_parent)))
+        declared_string = string(declared_string, '>', name(parent), '@', version(parent))
+        total_schema_fields = :(merge(Legolas.fields($quoted_parent), $total_schema_fields))
         parent_row_invocation = :(fields = Legolas.row($quoted_parent; fields...))
         parent_find_violation_invocation = quote
             result = Legolas.find_violation(tables_schema, $quoted_parent)
@@ -484,20 +392,20 @@ macro schema(id, field_exprs...)
     end
 
     return quote
-        if Legolas.schema_declared($quoted_schema) && Legolas.schema_declaration($quoted_schema) != $quoted_schema_declaration
-            throw(SchemaDeclarationError("invalid redeclaration of existing schema; all `@schema` redeclarations must exactly match previous declarations"))
+        if Legolas.declared($quoted_schema) && Legolas.declaration($quoted_schema) != $quoted_schema_declaration
+            throw(SchemaVersionDeclarationError("invalid redeclaration of existing schema; all `@schema` redeclarations must exactly match previous declarations"))
         else
             Legolas._validate_wrt_parent($field_names_types, $quoted_parent)
 
-            @inline Legolas.schema_declared(::$quoted_schema_type) = true
+            @inline Legolas.declared(::$quoted_schema_type) = true
 
-            @inline Legolas.schema_identifier(::$quoted_schema_type) = $qualified_string
+            @inline Legolas.identifier(::$quoted_schema_type) = $qualified_string
 
-            @inline Legolas.schema_parent(::$quoted_schema_type) = $quoted_parent
+            @inline Legolas.parent(::$quoted_schema_type) = $quoted_parent
 
-            Legolas.schema_fields(::$quoted_schema_type) = $total_schema_fields
+            Legolas.fields(::$quoted_schema_type) = $total_schema_fields
 
-            Legolas.schema_declaration(::$quoted_schema_type) = $quoted_schema_declaration
+            Legolas.declaration(::$quoted_schema_type) = $quoted_schema_declaration
 
             function Legolas._row(::$quoted_schema_type; $((Expr(:kw, esc(f.name), :missing) for f in fields)...), extra...)
                 $((esc(f.statement) for f in fields)...)
@@ -523,4 +431,44 @@ macro schema(id, field_exprs...)
     end
 end
 
+# _, parent_fields = declaration(parent)
+# fields = collect(NamedTuple, values(merge(NamedTuple(parent_fields), declared_fields)))
 
+function _generate_record_definition(prefix::Symbol, v::Int, fields)
+    params = Expr[]
+    parameterized_fields = Symbol[]
+    field_definitions = Expr[]
+    field_assignments = Expr[]
+    for f in fields
+        if f.parameterize
+            T = Symbol("_", string(f.name, "_T"))
+            push!(params, :($T <: $(f.type)))
+            f = merge(f, (; type=T, statement=:($(f.name) = $(f.statement.args[2]))))
+            push!(parameterized_fields, f.name)
+        end
+        push!(field_definitions, :($(f.name)::$(f.type)))
+        push!(field_assignments, f.statement)
+    end
+    R = Symbol(string(prefix, "V", v))
+    param_names = [p.args[1] for p in params]
+    row = gensym()
+    row_fields = [:($row.$(f.name)) for f in fields]
+    row_params = [:(typeof($row.$f)) for f in parameterized_fields]
+    field_params = [:(typeof($f)) for f in parameterized_fields]
+    field_kwargs = [Expr(:kw, f.name, :missing) for f in fields]
+    return quote
+        struct $R{$(params...)} <: Tables.AbstractRow
+            $(field_definitions...)
+            function $R{$(param_names...)}(; $(field_kwargs...)) where {$(param_names...)}
+                $(field_assignments...)
+                return new{$(param_names...)}($((f.name for f in fields)...))
+            end
+        end
+        $R(; $(field_kwargs...)) = $R{$(field_params...)}(; $((f.name for f in fields)...))
+        $R($row) = $R{$(row_params...)}(; $(row_fields...))
+        $R{$(param_names...)}($row) where {$(param_names...)} = $R{$(param_names...)}(; $(row_fields...))
+        @inline Tables.getcolumn(r::$R, i::Int) = getfield(r, i)
+        @inline Tables.getcolumn(r::$R, nm::Symbol) = getfield(r, nm)
+        @inline Tables.columnnames(r::$R) = fieldnames(typeof(r))
+    end
+end

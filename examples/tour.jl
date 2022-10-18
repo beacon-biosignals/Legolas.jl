@@ -17,25 +17,26 @@ using Legolas: @schema, Schema, @alias, complies_with, find_violation, validate,
 # We'll dive into the extensibility and versioning aspects of Legolas later. For now,
 # let's start the tour by declaring a new Legolas schema via the `@schema` macro.
 
-# Each Legolas schema declaration must specify the declared schema's name, version,
-# and the set of required fields that a given row value must contain in order to comply
-# with that schema. Let's use the `@schema` macro to declare a new schema named
-# `example.foo` at an initial version `1` with the given required fields:
-@schema("example.foo@1",
-        a::Real,
-        b::String,
-        c,
-        d::AbstractVector)
+# Here, we declare a new schema named `example.foo`, specifying that Legolas should
+# use the prefix `Foo` whenever it generates `example.foo`-related type definitions:
+@schema("example.foo", Foo)
 
-# This `@schema` declaration automatically overloaded a bunch of methods with respect to
-# a special type corresponding to the `example.foo@1` schema. We can create new instances
-# of this type via `Legolas.Schema`:
-@test Schema("example.foo", 1) == Schema{Symbol("example.foo"),1}()
+# The above schema declaration provides the necessary scaffolding to start declaring
+# new *versions* of the `example.foo` schema. Schema version declarations specify the
+# set of required fields that a given table (or row) must contain in order to comply
+# with that schema version. Let's use the `@version` macro to declare an initial
+# version of the `example.foo` schema with some required fields:
+@version("example.foo@1",
+         a::Real,
+         b::String,
+         c,
+         d::AbstractVector)
 
-# We can use `@alias` to declare a type alias `Foo{v}` that can be used to more succinctly refer
-# to `Schema{Symbol("example.foo"),1}` and construct instances of the `example.foo@1` schema:
-@alias("example.foo", Foo)
-@test Foo(1) == Schema("example.foo", 1)
+# Behind the scenes, this `@version` declaration automatically generated some type definitions
+# and overloaded a bunch of useful Legolas methods with respect to `example.foo@1`. One of the
+# most important types it generated is `FooV1Schema`, which is an alias of Legolas' `Schema`
+# type:
+@test FooV1Schema() == Schema("example.foo", 1)
 
 #####
 ##### Schema Compliance/Validation
