@@ -359,7 +359,7 @@ function _generate_record_definition(prefix::Symbol, schema_version::SchemaVersi
     field_params = [:(typeof($f)) for f in parameterized_fields]
     field_kwargs = [Expr(:kw, f.name, :missing) for f in record_fields]
     return quote
-        const $T = $(Base.Meta.quot(schema_version))
+        const $T = $(Base.Meta.quot(typeof(schema_version)))
         struct $R{$(params...)} <: $(Tables).AbstractRow
             $(field_definitions...)
             function $R{$(param_names...)}(; $(field_kwargs...)) where {$(param_names...)}
@@ -373,7 +373,6 @@ function _generate_record_definition(prefix::Symbol, schema_version::SchemaVersi
         @inline $(Tables).getcolumn(r::$R, i::Int) = getfield(r, i)
         @inline $(Tables).getcolumn(r::$R, nm::Symbol) = getfield(r, nm)
         @inline $(Tables).columnnames(r::$R) = fieldnames(typeof(r))
-
     end
 end
 
