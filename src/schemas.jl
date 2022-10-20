@@ -251,7 +251,7 @@ complies_with(ts::Tables.Schema, sv::SchemaVersion) = isnothing(find_violation(t
 """
     TODO
 """
-schema_type_prefix(::Val{n}) where {n} = throw(UnknownSchemaError(n, nothing))
+schema_type_prefix(::Val) = nothing
 
 macro schema(schema_name, schema_prefix)
     schema_name isa String || return :(throw(ArgumentError("`schema_name` provided to `@schema` must be a string literal")))
@@ -310,11 +310,11 @@ function _has_valid_child_field_types(child_fields::NamedTuple, parent_fields::N
     return true
 end
 
-_validate_wrt_parent(child_fields::NamedTuple, parent::Nothing) = nothing
+_validate_wrt_parent(::NamedTuple, ::Nothing) = nothing
 
-function _validate_wrt_parent(child_fields::NamedTuple, parent::Schema)
-    declared(parent) || throw(SchemaDeclarationError("parent schema cannot be used before it has been declared: $parent"))
-    _has_valid_child_field_types(child_fields, required_fields(parent)) || throw(SchemaDeclarationError("declared field types violate parent schema's field types"))
+function _validate_wrt_parent(child_fields::NamedTuple, parent::SchemaVersion)
+    declared(parent) || throw(SchemaVersionDeclarationError("parent schema cannot be used before it has been declared: $parent"))
+    _has_valid_child_field_types(child_fields, required_fields(parent)) || throw(SchemaVersionDeclarationError("declared field types violate parent schema's field types"))
     return nothing
 end
 
@@ -326,6 +326,55 @@ function _check_for_expected_field(schema::Tables.Schema, name::Symbol, ::Type{T
         schema.types[i] <: T || return schema.types[i]
     end
     return nothing
+end
+
+function _generate_record_definition(prefix::Symbol, schema_version::SchemaVersion, parent::Union{Nothing,SchemaVersion})
+    _, record_fields = Legolas.declaration(schema_version)
+    if isnothing(parent)
+        record_fields = collect(NamedTuple, values(record_fields))
+    else
+        _, parent_fields = Legolas.declaration(parent)
+        record_fields = collect(NamedTuple, values(merge(NamedTuple(parent_fields), record_fields)))
+    end
+    params = Expr[]
+    parameterized_fields = Symbol[]
+    field_definitions = Expr[]
+    field_assignments = Expr[]
+    for f in record_fields
+        if f.parameterize
+            T = Symbol("_", string(f.name, "_T"))
+            push!(params, :($T <: $(f.type)))
+            f = merge(f, (; type=T, statement=:($(f.name) = $(f.statement.args[2]))))
+            push!(parameterized_fields, f.name)
+        end
+        push!(field_definitions, :($(f.name)::$(f.type)))
+        push!(field_assignments, f.statement)
+    end
+    R = Symbol(string(prefix, "V", version(schema_version)))
+    T = Symbol(string(prefix, "SchemaV", version(schema_version)))
+    param_names = [p.args[1] for p in params]
+    row = gensym()
+    row_fields = [:($row.$(f.name)) for f in record_fields]
+    row_params = [:(typeof($row.$f)) for f in parameterized_fields]
+    field_params = [:(typeof($f)) for f in parameterized_fields]
+    field_kwargs = [Expr(:kw, f.name, :missing) for f in record_fields]
+    return quote
+        const $T = $(Base.Meta.quot(schema_version))
+        struct $R{$(params...)} <: $(Tables).AbstractRow
+            $(field_definitions...)
+            function $R{$(param_names...)}(; $(field_kwargs...)) where {$(param_names...)}
+                $(field_assignments...)
+                return new{$(param_names...)}($((f.name for f in record_fields)...))
+            end
+        end
+        $R(; $(field_kwargs...)) = $R{$(field_params...)}(; $((f.name for f in record_fields)...))
+        $R($row) = $R{$(row_params...)}(; $(row_fields...))
+        $R{$(param_names...)}($row) where {$(param_names...)} = $R{$(param_names...)}(; $(row_fields...))
+        @inline $(Tables).getcolumn(r::$R, i::Int) = getfield(r, i)
+        @inline $(Tables).getcolumn(r::$R, nm::Symbol) = getfield(r, nm)
+        @inline $(Tables).columnnames(r::$R) = fieldnames(typeof(r))
+
+    end
 end
 
 macro version(id, required_fields)
@@ -348,6 +397,10 @@ macro version(id, required_fields)
         return :(throw(SchemaVersionDeclarationError(string("schema version identifier should specify at most one parent, found multiple: ", $schemas))))
     end
 
+    prefix = schema_type_prefix(Val(name(schema)))
+    isnothing(prefix) && return :(throw(SchemaVersionDeclarationError("TODO")))
+    prefix = Base.Meta.quot(prefix)
+
     required_fields isa Expr && required_fields.head == :block && !isempty(required_fields.args) || return :(throw(SchemaVersionDeclarationError("malformed or missing declaration of required fields")))
     required_fields = [f for f in required_fields.args if !(f isa LineNumberNode)]
     fields = NamedTuple[]
@@ -362,113 +415,66 @@ macro version(id, required_fields)
     allunique(f.name for f in fields) || return :(throw(SchemaVersionDeclarationError(string("cannot have duplicate field names in `@schema` declaration; recieved: ", $([f.name for f in fields])))))
     field_names_types = Expr(:tuple, (:($(f.name) = $(esc(f.type))) for f in fields)...)
 
-    quoted_schema = Base.Meta.quot(schema)
-    quoted_schema_type = Base.Meta.quot(typeof(schema))
+    # basic definition elements
+    quoted_schema_version = Base.Meta.quot(schema)
+    quoted_schema_version_type = Base.Meta.quot(typeof(schema))
     quoted_parent = Base.Meta.quot(parent)
 
-    qualified_string = string(name(schema), '@', version(schema))
-    declared_string = qualified_string
-    total_schema_fields = field_names_types
-    parent_row_invocation = nothing
-    parent_find_violation_invocation = nothing
+    # basic accessor function definitions
+    full_identifier_string = string(name(schema), '@', version(schema))
+    child_identifier_string = full_identifier_string
+    required_field_names_types = field_names_types
     if !isnothing(parent)
-        qualified_string = :(string($qualified_string, '>', Legolas.identifier($quoted_parent)))
-        declared_string = string(declared_string, '>', name(parent), '@', version(parent))
-        total_schema_fields = :(merge(Legolas.fields($quoted_parent), $total_schema_fields))
-        parent_row_invocation = :(fields = Legolas.row($quoted_parent; fields...))
-        parent_find_violation_invocation = quote
-            result = Legolas.find_violation(tables_schema, $quoted_parent)
-            isnothing(result) || return result
-        end
+        full_identifier_string = :(string($full_identifier_string, '>', Legolas.identifier($quoted_parent)))
+        child_identifier_string = string(child_identifier_string, '>', name(parent), '@', version(parent))
+        required_field_names_types = :(merge(Legolas.required_fields($quoted_parent), $required_field_names_types))
     end
+    quoted_schema_version_declaration = Base.Meta.quot(child_identifier_string => Dict(f.name => f for f in fields))
 
-    quoted_schema_declaration = Base.Meta.quot(declared_string => Dict(f.name => f.statement for f in fields))
-    check_for_expected_field_statements = map(fields) do f
-        fname = Base.Meta.quot(f.name)
-        return quote
-            result = Legolas._check_for_expected_field(tables_schema, $fname, $(esc(f.type)))
-            isnothing(result) || return $fname => result
-        end
-    end
+    # validation function definitions
+    # parent_find_violation_invocation = isnothing(parent) ? nothing : quote
+    #     result = Legolas.find_violation(tables_schema, $quoted_parent)
+    #     isnothing(result) || return result
+    # end
+    # check_for_expected_field_statements = map(fields) do f
+    #     fname = Base.Meta.quot(f.name)
+    #     return quote
+    #         S = Legolas.accepted_field_type(sv, $(esc(f.type)))
+    #         result = Legolas._check_for_expected_field(ts, $fname, S)
+    #         isnothing(result) || return $fname => result
+    #     end
+    # end
 
     return quote
-        if Legolas.declared($quoted_schema) && Legolas.declaration($quoted_schema) != $quoted_schema_declaration
+        if Legolas.declared($quoted_schema_version) && Legolas.declaration($quoted_schema_version) != $quoted_schema_version_declaration
             throw(SchemaVersionDeclarationError("invalid redeclaration of existing schema; all `@schema` redeclarations must exactly match previous declarations"))
         else
             Legolas._validate_wrt_parent($field_names_types, $quoted_parent)
 
-            @inline Legolas.declared(::$quoted_schema_type) = true
+            @inline Legolas.declared(::$quoted_schema_version_type) = true
 
-            @inline Legolas.identifier(::$quoted_schema_type) = $qualified_string
+            @inline Legolas.identifier(::$quoted_schema_version_type) = $full_identifier_string
 
-            @inline Legolas.parent(::$quoted_schema_type) = $quoted_parent
+            @inline Legolas.parent(::$quoted_schema_version_type) = $quoted_parent
 
-            Legolas.fields(::$quoted_schema_type) = $total_schema_fields
+            Legolas.required_fields(::$quoted_schema_version_type) = $required_field_names_types
 
-            Legolas.declaration(::$quoted_schema_type) = $quoted_schema_declaration
+            Legolas.declaration(::$quoted_schema_version_type) = $quoted_schema_version_declaration
 
-            function Legolas._row(::$quoted_schema_type; $((Expr(:kw, esc(f.name), :missing) for f in fields)...), extra...)
-                $((esc(f.statement) for f in fields)...)
-                return (; $((Expr(:kw, esc(f.name), esc(f.name)) for f in fields)...), extra...)
-            end
+            # function Legolas._find_violation(ts::Tables.Schema, sv::$quoted_schema_version_type)
+            #     $(check_for_expected_field_statements...)
+            #     return nothing
+            # end
 
-            function Legolas.row(schema::$quoted_schema_type; fields...)
-                $parent_row_invocation
-                return Legolas._row(schema; fields...)
-            end
+            # function Legolas.find_violation(ts::Tables.Schema, sv::$quoted_schema_version_type)
+            #     $parent_find_violation_invocation
+            #     return Legolas._find_violation(ts, sv)
+            # end
 
-            function Legolas._find_violation(tables_schema::Tables.Schema, legolas_schema::$quoted_schema_type)
-                $(check_for_expected_field_statements...)
-                return nothing
-            end
-
-            function Legolas.find_violation(tables_schema::Tables.Schema, legolas_schema::$quoted_schema_type)
-                $parent_find_violation_invocation
-                return Legolas._find_violation(tables_schema, legolas_schema)
-            end
+            $(esc(:eval))(Legolas._generate_record_definition($prefix, $quoted_schema_version, $quoted_parent))
         end
         nothing
     end
 end
 
-# _, parent_fields = declaration(parent)
-# fields = collect(NamedTuple, values(merge(NamedTuple(parent_fields), declared_fields)))
 
-function _generate_record_definition(prefix::Symbol, v::Int, fields)
-    params = Expr[]
-    parameterized_fields = Symbol[]
-    field_definitions = Expr[]
-    field_assignments = Expr[]
-    for f in fields
-        if f.parameterize
-            T = Symbol("_", string(f.name, "_T"))
-            push!(params, :($T <: $(f.type)))
-            f = merge(f, (; type=T, statement=:($(f.name) = $(f.statement.args[2]))))
-            push!(parameterized_fields, f.name)
-        end
-        push!(field_definitions, :($(f.name)::$(f.type)))
-        push!(field_assignments, f.statement)
-    end
-    R = Symbol(string(prefix, "V", v))
-    param_names = [p.args[1] for p in params]
-    row = gensym()
-    row_fields = [:($row.$(f.name)) for f in fields]
-    row_params = [:(typeof($row.$f)) for f in parameterized_fields]
-    field_params = [:(typeof($f)) for f in parameterized_fields]
-    field_kwargs = [Expr(:kw, f.name, :missing) for f in fields]
-    return quote
-        struct $R{$(params...)} <: Tables.AbstractRow
-            $(field_definitions...)
-            function $R{$(param_names...)}(; $(field_kwargs...)) where {$(param_names...)}
-                $(field_assignments...)
-                return new{$(param_names...)}($((f.name for f in fields)...))
-            end
-        end
-        $R(; $(field_kwargs...)) = $R{$(field_params...)}(; $((f.name for f in fields)...))
-        $R($row) = $R{$(row_params...)}(; $(row_fields...))
-        $R{$(param_names...)}($row) where {$(param_names...)} = $R{$(param_names...)}(; $(row_fields...))
-        @inline Tables.getcolumn(r::$R, i::Int) = getfield(r, i)
-        @inline Tables.getcolumn(r::$R, nm::Symbol) = getfield(r, nm)
-        @inline Tables.columnnames(r::$R) = fieldnames(typeof(r))
-    end
-end
