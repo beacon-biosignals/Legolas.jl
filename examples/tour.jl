@@ -5,7 +5,7 @@
 
 using Legolas, Arrow, Tables, Test
 
-using Legolas: @schema, Schema, @alias, complies_with, find_violation, validate, row
+using Legolas: @schema, @version, complies_with, find_violation, validate
 
 #####
 ##### Introduction
@@ -26,25 +26,25 @@ using Legolas: @schema, Schema, @alias, complies_with, find_violation, validate,
 # set of required fields that a given table (or row) must contain in order to comply
 # with that schema version. Let's use the `@version` macro to declare an initial
 # version of the `example.foo` schema with some required fields:
-@version("example.foo@1",
-         a::Real,
-         b::String,
-         c,
-         d::AbstractVector)
+@version "example.foo@1" begin
+    a::Real
+    b::String
+    c
+    d::AbstractVector
+end
 
 # Behind the scenes, this `@version` declaration automatically generated some type definitions
 # and overloaded a bunch of useful Legolas methods with respect to `example.foo@1`. One of the
-# most important types it generated is `FooV1Schema`, which is an alias of Legolas' `Schema`
-# type:
-@test FooV1Schema() == Schema("example.foo", 1)
+# types it generated is `FooSchemaV1`, an alias for `Legolas.SchemaVersion`:
+@test FooSchemaV1() == Legolas.SchemaVersion("example.foo", 1)
 
 #####
-##### Schema Compliance/Validation
+##### `Tables.Schema` Compliance/Validation
 #####
 
 # We can use `complies_with`, `validate`, and `find_violation` to check whether a given
 # `Tables.Schema` (ref https://tables.juliadata.org/stable/#Tables.Schema) complies with
-# our `example.foo@1` schema.
+# `example.foo@1`.
 
 # For example, all of the following `Tables.Schema`s comply with `example.foo@1`:
 for s in [Tables.Schema((:a, :b, :c, :d), (Real, String, Any, AbstractVector)), # All required fields must be present...
@@ -53,75 +53,74 @@ for s in [Tables.Schema((:a, :b, :c, :d), (Real, String, Any, AbstractVector)), 
           Tables.Schema((:a, :b, :d), (Int, String, Vector)),                   # Fields whose declared type constraints are `>:Missing` may be elided entirely.
           Tables.Schema((:a, :x, :b, :y, :d), (Int, Any, String, Any, Vector))] # Non-required fields may also be present.
     # if `complies_with` finds a violation, it returns `false`; returns `true` otherwise
-    @test complies_with(s, Foo(1))
+    @test complies_with(s, FooSchemaV1())
 
     # if `validate` finds a violation, it throws an error indicating the violation;
     # returns `nothing` otherwise
-    @test validate(s, Foo(1)) isa Nothing
+    @test validate(s, FooSchemaV1()) isa Nothing
 
     # if `find_violation` finds a violation, it returns a tuple indicating the relevant
     # field and its violation; returns `nothing` otherwise
-    @test isnothing(find_violation(s, Foo(1)))
+    @test isnothing(find_violation(s, FooSchemaV1()))
 end
 
 # ...while the below `Tables.Schema`s do not:
 
 s = Tables.Schema((:a, :c, :d), (Int, Float64, Vector)) # The required non-`>:Missing` field `b::String` is not present.
-@test !complies_with(s, Foo(1))
-@test_throws ArgumentError validate(s, Foo(1))
-@test isequal(find_violation(s, Foo(1)), :b => missing)
+@test !complies_with(s, FooSchemaV1())
+@test_throws ArgumentError validate(s, FooSchemaV1())
+@test isequal(find_violation(s, FooSchemaV1()), :b => missing)
 
 s = Tables.Schema((:a, :b, :c, :d), (Int, String, Float64, Any)) # The type of required field `d::AbstractVector` is not `<:AbstractVector`.
-@test !complies_with(s, Foo(1))
-@test_throws ArgumentError validate(s, Foo(1))
-@test isequal(find_violation(s, Foo(1)), :d => Any)
+@test !complies_with(s, FooSchemaV1())
+@test_throws ArgumentError validate(s, FooSchemaV1())
+@test isequal(find_violation(s, FooSchemaV1()), :d => Any)
 
 # The expectations that characterize Legolas' particular notion of "schematic compliance" - requiring the
 # presence of pre-specified declared fields, assuming non-present fields to be implicitly `missing`, and allowing
 # the presence of non-required fields - were chosen such that the question "Does the table `t` comply with the Legolas
-# schema `s`?" is roughly equivalent to "Can a logical view be trivially constructed atop table `t` that contains only
-# the required fields declared by `s`?" The ability to cleanly ask this question enables a weak notion of "subtyping"
+# schema version `s`?" is roughly equivalent to "Can a logical view be trivially constructed atop table `t` that contains
+# only the required fields declared by `s`?" The ability to cleanly ask this question enables a weak notion of "subtyping"
 # (see https://en.wikipedia.org/wiki/Duck_typing, https://en.wikipedia.org/wiki/Liskov_substitution_principle) that is
 # core to Legolas' mechanisms for defining, extending, and versioning interfaces to tabular data.
 
 #####
-##### `Legolas.row`
+##### Legolas-Generated Record Types
 #####
+# In addition to `FooSchemaV1`, `example.foo@1`'s `@version` declaration also generated a new type,
+# `FooV1 <: Tables.AbstractRow`, whose fields are guaranteed to match all the fields required by
+# `example.foo@1`. We refer to such Legolas-generated types as "Legolas record types" (see
+# https://en.wikipedia.org/wiki/Record_(computer_science)).
 
-# `Legolas.row` returns a "canonicalized" schema-compliant row value from a given set of fields,
-# provided as either keyword arguments or as an `Tables.AbstractRow`-compliant value:
+# Legolas record type constructors accept keyword arguments or `Tables.AbstractRow`-compliant values:
 fields = (a=1.0, b="hi", c=π, d=[1, 2, 3])
-@test row(Foo(1); fields...) == fields
-@test row(Foo(1), fields) == fields
+@test NamedTuple(FooV1(; fields...)) == fields
+@test NamedTuple(FooV1(fields)) == fields
 
-# This may seem like a fairly trivial function in the preceding example, but the `row` function has
-# some useful and convenient properties. Specifically, input fields provided to `row` may:
+# This may seem like a fairly trivial constructor in the preceding example, but it has some properties
+# that can be quite convenient in practice. Specifically, row values provided to `FooV1` may:
 #
-# - ...contain required fields in any order
+# - ...contain the associated schema version's required fields in any order
 # - ...elide required fields, in which case the constructor will assume them to be `missing`
-# - ...contain any other fields in addition to the required fields
-#
-# ...while the output of `row` will always:
-#
-# - ...be a `Tables.AbstractRow`-compliant value
-# - ...comply with the provided schema (otherwise an exception will be thrown)
-# - ...contain all required fields (missing required fields are explicitly given `missing` values)
-# - ...contain all provided non-required fields
+# - ...contain any other fields in addition to the required fields; such additional fields are simply ignored
 #
 # Demonstrating a few of these properties:
 
-# Providing the additional non-required field `x` in the input, which is preserved in the output:
-@test row(Foo(1); fields..., x="x") == (; fields..., x="x")
+# Providing the additional non-required field `x` in the input, which is simply ignored:
+fields_with_x = (; fields..., x="x")
+@test NamedTuple(FooV1(fields_with_x)) == fields
 
 # Eliding the required field `c`, which is assigned `missing` in the output:
-@test isequal(row(Foo(1); a=1.0, b="hi", d=[1, 2, 3]), (a=1.0, b="hi", c=missing, d=[1, 2, 3]))
+foo = FooV1(; a=1.0, b="hi", d=[1, 2, 3])
+@test isequal(NamedTuple(foo), (a=1.0, b="hi", c=missing, d=[1, 2, 3]))
 
 # Providing the non-compliantly-typed field `d::Int`, inducing a `MethodError`:
-@test_throws MethodError row(Foo(1); a=1.0, b="hi", d=2)
+@test_throws MethodError FooV1(; a=1.0, b="hi", d=2)
 
 # Implicitly providing the non-compliantly-typed field `d::Missing`, inducing a `MethodError`:
-@test_throws MethodError row(Foo(1); a=1.0, b="hi")
+@test_throws MethodError FooV1(; a=1.0, b="hi")
 
+#=
 #####
 ##### Custom Field Assignments
 #####
@@ -308,3 +307,4 @@ invalid_but_has_schema_metadata = Arrow.tobuffer(invalid; metadata=("legolas_sch
 # given `path` supports `Base.read(path)::Vector{UInt8}` and `Base.write(path, bytes::Vector{UInt8})` then
 # `path` will work as an argument to `Legolas.read`/`Legolas.write`. At some point, we'd like to make similar
 # upstream improvements to Arrow.jl to render its API more path-type-agnostic.
+=#

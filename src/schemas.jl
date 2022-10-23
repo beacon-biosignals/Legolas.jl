@@ -197,7 +197,7 @@ declaration(sv::SchemaVersion) = throw(UnknownSchemaError(sv))
 ##### `Tables.Schema` validation
 #####
 
-accepted_field_type(::SchemaVersion, T::DataType) = T
+@inline accepted_field_type(::SchemaVersion, T) = T
 accepted_field_type(::SchemaVersion, ::Type{UUID}) = Union{UUID,UInt128}
 
 """
@@ -230,7 +230,7 @@ function validate(ts::Tables.Schema, sv::SchemaVersion)
     isnothing(result) && return nothing
     field, violation = result
     ismissing(violation) && throw(ArgumentError("could not find expected field `$field` in $ts"))
-    expected = getfield(schema_fields(sv), field)
+    expected = getfield(required_fields(sv), field)
     throw(ArgumentError("field `$field` has unexpected type; expected <:$expected, found $violation"))
 end
 
@@ -258,6 +258,13 @@ abstract type AbstractRecord <: Tables.AbstractRow end
 @inline Tables.getcolumn(r::AbstractRecord, nm::Symbol) = getfield(r, nm)
 @inline Tables.columnnames(r::AbstractRecord) = fieldnames(typeof(r))
 @inline Tables.schema(::AbstractVector{R}) where {R<:AbstractRecord} = Tables.Schema(fieldnames(R), fieldtypes(R))
+
+
+# Base.:(==)(a::Row, b::Row) = getfield(a, :schema) == getfield(b, :schema) && getfield(a, :fields) == getfield(b, :fields)
+# Base.isequal(a::Row, b::Row) = isequal(getfield(a, :schema), getfield(b, :schema)) && isequal(getfield(a, :fields), getfield(b, :fields))
+# Base.hash(a::Row, h::UInt) = hash(Row, hash(getfield(a, :schema), hash(getfield(a, :fields), h)))
+
+# arrow serialization
 
 #####
 ##### `@schema`
@@ -311,6 +318,10 @@ struct RequiredFieldInfo
     parameterize::Bool
     statement::Union{Symbol,Expr}
 end
+
+Base.:(==)(a::RequiredFieldInfo, b::RequiredFieldInfo) = all(getfield(a, i) == getfield(b, i) for i in 1:fieldcount(RequiredFieldInfo))
+# Base.isequal(a::Row, b::Row) = isequal(getfield(a, :schema), getfield(b, :schema)) && isequal(getfield(a, :fields), getfield(b, :fields))
+# Base.hash(a::Row, h::UInt) = hash(Row, hash(getfield(a, :schema), hash(getfield(a, :fields), h)))
 
 function _parse_required_field_info!(f)
     f isa Symbol && (f = Expr(:(::), f, :Any))
@@ -382,13 +393,12 @@ _schema_version_alias_name(prefix::Symbol, version::Integer) = Symbol(string(pre
 # callsite that are not available/valid at the child's `@version` callsite.
 function _generate_record_type_definitions(schema_version::SchemaVersion, prefix::Symbol)
     # generate `schema_version_type_alias_definition`
-
     T = _schema_version_alias_name(prefix, version(schema_version))
     schema_version_type_alias_definition = quote
         const $T = $(Base.Meta.quot(typeof(schema_version)))
     end
 
-    # generate `record_type_definition`
+    # generate building blocks for record type definitions
     record_fields = required_fields(schema_version)
     _, declared_field_infos = declaration(schema_version)
     declared_field_infos = Dict(f.name => f for f in declared_field_infos)
@@ -413,7 +423,8 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, prefix
         push!(field_definitions, fdef)
     end
     R = _record_type_name(prefix, version(schema_version))
-    type_param_names = [p.args[1] for p in type_param_defs]
+
+    # generate `parent_record_application`
     field_kwargs = [Expr(:kw, n, :missing) for n in keys(record_fields)]
     parent_record_application = nothing
     parent = Legolas.parent(schema_version)
@@ -426,9 +437,22 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, prefix
             $((:($n = $p.$n) for n in parent_record_field_names)...)
         end
     end
-    record_type_definition = quote
-        struct $R{$(type_param_defs...)} <: $(Legolas).AbstractRecord
-            $(field_definitions...)
+
+    # generate `inner_constructor_definitions` and `outer_constructor_definitions`
+    row = gensym()
+    row_fields = [:($row.$n) for n in keys(record_fields)]
+    if isempty(type_param_defs)
+        inner_constructor_definitions = quote
+            function $R(; $(field_kwargs...))
+                $parent_record_application
+                $(field_assignments...)
+                return new($(keys(record_fields)...))
+            end
+        end
+        outer_constructor_definitions = :($R($row) = $R(; $(row_fields...)))
+    else
+        type_param_names = [p.args[1] for p in type_param_defs]
+        inner_constructor_definitions = quote
             function $R{$(type_param_names...)}(; $(field_kwargs...)) where {$(type_param_names...)}
                 $parent_record_application
                 $(field_assignments...)
@@ -440,21 +464,19 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, prefix
                 return new{$((:(typeof($n)) for n in names_of_parameterized_fields)...)}($(keys(record_fields)...))
             end
         end
+        outer_constructor_definitions = quote
+            $R($row) = $R{$((:(typeof($row.$n)) for n in names_of_parameterized_fields)...)}(; $(row_fields...))
+            $R{$(type_param_names...)}($row) where {$(type_param_names...)} = $R{$(type_param_names...)}(; $(row_fields...))
+        end
     end
 
-    # generate `record_type_outer_constructor_definitions`
-    row = gensym()
-    row_fields = [:($row.$n) for n in keys(record_fields)]
-    record_type_outer_constructor_definitions = quote
-        $R($row) = $R{$((:(typeof($row.$f)) for f in names_of_parameterized_fields)...)}(; $(row_fields...))
-        $R{$(type_param_names...)}($row) where {$(type_param_names...)} = $R{$(type_param_names...)}(; $(row_fields...))
-    end
-
-    # return full set of definitions
     return quote
         $schema_version_type_alias_definition
-        $record_type_definition
-        $record_type_outer_constructor_definitions
+        struct $R{$(type_param_defs...)} <: $(Legolas).AbstractRecord
+            $(field_definitions...)
+            $inner_constructor_definitions
+        end
+        $outer_constructor_definitions
     end
 end
 
@@ -519,9 +541,10 @@ macro version(id, required_field_statements)
         required_field_names_types = :(merge(Legolas.required_fields($quoted_parent), $required_field_names_types))
     end
     schema_version_declaration = :($child_identifier_string => copy($(Base.Meta.quot(required_field_infos))))
+    check_against_declaration = :($child_identifier_string => $(Base.Meta.quot(required_field_infos)))
 
     return quote
-        if Legolas.declared($quoted_schema_version) && Legolas.declaration($quoted_schema_version) != $schema_version_declaration
+        if Legolas.declared($quoted_schema_version) && Legolas.declaration($quoted_schema_version) != $check_against_declaration
             throw(SchemaVersionDeclarationError("invalid redeclaration of existing schema; all `@schema` redeclarations must exactly match previous declarations"))
         else
             Legolas._validate_wrt_parent($field_names_types, $quoted_parent)
