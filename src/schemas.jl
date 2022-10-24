@@ -259,10 +259,7 @@ abstract type AbstractRecord <: Tables.AbstractRow end
 @inline Tables.columnnames(r::AbstractRecord) = fieldnames(typeof(r))
 @inline Tables.schema(::AbstractVector{R}) where {R<:AbstractRecord} = Tables.Schema(fieldnames(R), fieldtypes(R))
 
-
-# Base.:(==)(a::Row, b::Row) = getfield(a, :schema) == getfield(b, :schema) && getfield(a, :fields) == getfield(b, :fields)
-# Base.isequal(a::Row, b::Row) = isequal(getfield(a, :schema), getfield(b, :schema)) && isequal(getfield(a, :fields), getfield(b, :fields))
-# Base.hash(a::Row, h::UInt) = hash(Row, hash(getfield(a, :schema), hash(getfield(a, :fields), h)))
+Base.:(==)(a::R, b::R) where {R<:AbstractRecord} = all(getfield(a, i) == getfield(b, i) for i in 1:fieldcount(RequiredFieldInfo))
 
 # arrow serialization
 
@@ -320,8 +317,6 @@ struct RequiredFieldInfo
 end
 
 Base.:(==)(a::RequiredFieldInfo, b::RequiredFieldInfo) = all(getfield(a, i) == getfield(b, i) for i in 1:fieldcount(RequiredFieldInfo))
-# Base.isequal(a::Row, b::Row) = isequal(getfield(a, :schema), getfield(b, :schema)) && isequal(getfield(a, :fields), getfield(b, :fields))
-# Base.hash(a::Row, h::UInt) = hash(Row, hash(getfield(a, :schema), hash(getfield(a, :fields), h)))
 
 function _parse_required_field_info!(f)
     f isa Symbol && (f = Expr(:(::), f, :Any))
@@ -394,9 +389,7 @@ _schema_version_alias_name(prefix::Symbol, version::Integer) = Symbol(string(pre
 function _generate_record_type_definitions(schema_version::SchemaVersion, prefix::Symbol)
     # generate `schema_version_type_alias_definition`
     T = _schema_version_alias_name(prefix, version(schema_version))
-    schema_version_type_alias_definition = quote
-        const $T = $(Base.Meta.quot(typeof(schema_version)))
-    end
+    schema_version_type_alias_definition = :(const $T = $(Base.Meta.quot(typeof(schema_version))))
 
     # generate building blocks for record type definitions
     record_fields = required_fields(schema_version)
@@ -440,7 +433,8 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, prefix
 
     # generate `inner_constructor_definitions` and `outer_constructor_definitions`
     row = gensym()
-    row_fields = [:($row.$n) for n in keys(record_fields)]
+    kwargs_from_row = [Expr(:kw, n, :(get($row, $(Base.Meta.quot(n)), missing))) for n in keys(record_fields)]
+    outer_constructor_definitions = :($R($row) = $R(; $(kwargs_from_row...)))
     if isempty(type_param_defs)
         inner_constructor_definitions = quote
             function $R(; $(field_kwargs...))
@@ -449,7 +443,6 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, prefix
                 return new($(keys(record_fields)...))
             end
         end
-        outer_constructor_definitions = :($R($row) = $R(; $(row_fields...)))
     else
         type_param_names = [p.args[1] for p in type_param_defs]
         inner_constructor_definitions = quote
@@ -465,8 +458,8 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, prefix
             end
         end
         outer_constructor_definitions = quote
-            $R($row) = $R{$((:(typeof($row.$n)) for n in names_of_parameterized_fields)...)}(; $(row_fields...))
-            $R{$(type_param_names...)}($row) where {$(type_param_names...)} = $R{$(type_param_names...)}(; $(row_fields...))
+            $outer_constructor_definitions
+            $R{$(type_param_names...)}($row) where {$(type_param_names...)} = $R{$(type_param_names...)}(; $(kwargs_from_row...))
         end
     end
 
@@ -477,6 +470,9 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, prefix
             $inner_constructor_definitions
         end
         $outer_constructor_definitions
+        Base.:(==)(a::$R, b::$R) = all(getfield(a, i) == getfield(b, i) for i in 1:fieldcount($R))
+        Base.isequal(a::$R, b::$R) = all(isequal(getfield(a, i), getfield(b, i)) for i in 1:fieldcount($R))
+        Base.hash(r::$R, h::UInt) = foldr(hash, (getfield(r, i) for i in 1:nfields(r)); init=hash($R, h))
     end
 end
 
@@ -500,6 +496,7 @@ macro version(id, required_field_statements)
         schema_version, parent = first(schema_versions), nothing
     elseif length(schema_versions) == 2
         schema_version, parent = schema_versions[1], schema_versions[2]
+        name(schema_version) == name(parent) && return :(throw(SchemaVersionDeclarationError("cannot extend from a different version of the same schema")))
     else
         return :(throw(SchemaVersionDeclarationError(string("schema version identifier should specify at most one parent, found multiple: ", $schema_versions))))
     end

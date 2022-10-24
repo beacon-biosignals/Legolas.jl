@@ -19,7 +19,7 @@ using Legolas: @schema, @version, complies_with, find_violation, validate
 
 # Here, we declare a new schema named `example.foo`, specifying that Legolas should
 # use the prefix `Foo` whenever it generates `example.foo`-related type definitions:
-@schema("example.foo", Foo)
+@schema "example.foo" Foo
 
 # The above schema declaration provides the necessary scaffolding to start declaring
 # new *versions* of the `example.foo` schema. Schema version declarations specify the
@@ -120,115 +120,121 @@ foo = FooV1(; a=1.0, b="hi", d=[1, 2, 3])
 # Implicitly providing the non-compliantly-typed field `d::Missing`, inducing a `MethodError`:
 @test_throws MethodError FooV1(; a=1.0, b="hi")
 
-#=
 #####
 ##### Custom Field Assignments
 #####
 
 # Schema authors may tailor the behavior of `row` for their schema by defining custom field
-# assignments in the schema's declaration. The `example.foo@1` schema declaration doesn't feature
-# any such assignments, so let's declare a new schema `example.bar@1` that does:
-@schema("example.bar@1",
-        x::Union{Int8,Missing} = ismissing(x) ? x : Int8(clamp(x, -128, 127)),
-        y::String = string(y),
-        z::String = ismissing(z) ? string(y, '_', x) : z)
-@alias("example.bar", Bar)
+# assignments in the schema's declaration. The `example.foo@1` declaration doesn't feature
+# any such assignments, so let's declare a new schema version `example.bar@1` that does:
+@schema "example.bar" Bar
 
-# These statements are then inlined into `Bar{1}`'s generated `row` method
-# definition, which becomes roughly equivalent to:
+@version "example.bar@1" begin
+    x::Union{Int8,Missing} = ismissing(x) ? x : Int8(clamp(x, -128, 127))
+    y::String = string(y)
+    z::String = ismissing(z) ? string(y, '_', x) : z
+end
+
+# These assignment statements are inlined into `BarV1`'s inner constructor
+# definition, such that it is roughly equivalent to:
 #
-#   function Legolas.row(::Bar{1}; x=missing, y=missing, __extra__...)
+#   function BarV1(; x=missing, y=missing)
 #       x::Union{Int8,Missing} = ismissing(x) ? x : Int8(clamp(x, -128, 127))
 #       y::String = string(y, '_', x)
-#       return (; x, y, __extra__...)
+#       return new(x, y)
 #   end
 #
-# ...such that invocations `row(::Bar{1}; ...)` have the following behavior:
-@test row(Bar(1); x=200, y=:hi) == (x=127, y="hi", z="hi_127")
-@test isequal(row(Bar(1); y=:hi), (x=missing, y="hi", z="hi_missing"))
-@test row(Bar(1); x=200, y=:hi, z="bye") == (x=127, y="hi", z="bye")
+# ...so that invocations `BarV1(; ...)` have the following behavior:
+@test NamedTuple(BarV1(; x=200, y=:hi)) == (x=127, y="hi", z="hi_127")
+@test isequal(NamedTuple(BarV1(; y=:hi)), (x=missing, y="hi", z="hi_missing"))
+@test NamedTuple(BarV1(; x=200, y=:hi, z="bye")) == (x=127, y="hi", z="bye")
 
 # Custom field assignments enable schema authors to enforce value-level constraints and to imbue
-# `row` with convenient per-field transformations/conversions so that it can accept a wider range
-# of applicable inputs for each field. However, schema authors that use custom field assignments
-# must always take care to preserve idempotency and avoid side effects / reliance on non-local
-# state.
+# record type constructors with convenient per-field transformations/conversions so that they can
+# accept a wider range of applicable inputs for each field. However, schema authors that use custom
+# field assignments must always take care to preserve idempotency and avoid side effects / reliance
+# on non-local state.
 #
-# In other words, **the following equivalences should always hold for non-pathological schemas**:
+# In other words, given a record type `R` generated from a non-pathological `@version` declaration,
+# we'd expect the following equivalences to hold:
 #
-#   row(schema, fields) == row(schema, fields)
-#   row(schema, row(schema, fields)) == row(schema, fields)
+#   R(fields) == R(fields)
+#   R(R(fields)) == R(fields)
 #
-# These are two very important expectations that must be met for `row` to behave as intended,
+# These are two very important expectations that must be met for record types to behave as intended,
 # but they are not enforceable by Legolas itself, since Legolas allows custom field assignments
 # to include arbitrary Julia code; thus, schema authors are responsible for not violating these
 # expectations.
 #
-# Let's check that `Bar{1}` meets these expectations:
+# Let's check that `BarV1` meets these expectations:
 fields = (x=200, y=:hi)
-@test row(Bar(1), fields) == row(Bar(1), fields)
-@test row(Bar(1), row(Bar(1), fields)) == row(Bar(1), fields)
+@test BarV1(fields) == BarV1(fields)
+@test BarV1(BarV1(fields)) == BarV1(fields)
 
-# For illustration's sake, here is an example of a pathological schema declaration that violates
+# For illustration's sake, here is an example of a pathological `@version` declaration that violates
 # both of these expectations:
 const GLOBAL_STATE = Ref(0)
 
-@schema("example.bad@1",
-        x::Int = x + 1,
-        y = (GLOBAL_STATE[] += y; GLOBAL_STATE[]))
-@alias("example.bad", Bad)
+@schema "example.bad" Bad
+
+@version "example.bad@1" begin
+    x::Int = x + 1
+    y = (GLOBAL_STATE[] += y; GLOBAL_STATE[])
+end
+
+fields = (x=1, y=1)
 
 # Demonstration of non-idempotency, both in `x` and `y` fields:
-@test row(Bad(1), row(Bad(1), (x=1, y=1))) != row(Bad(1), (x=1, y=1))
+@test BadV1(BadV1(fields)) != BadV1(fields)
 
 # Demonstration of side effects / reliance on non-local state in `y` field:
-@test row(Bad(1), (x=1, y=1)) != row(Bad(1), (x=1, y=1))
+@test BadV1(fields) != BadV1(fields)
 
 #####
-##### Extending Existing Schemas
+##### Extending Existing Schema Versions
 #####
 
-# Schemas declared via `@schema` can inherit the required fields specified by previous schema declarations.
-# Here, we define the schema `example.baz@1` which "extends" the schema `example.bar@1`:
-@schema("example.baz@1 > example.bar@1",
-        x::Int8,
-        z::String,
-        k::Int64 = ismissing(k) ? length(z) : k)
-@alias("example.baz", Baz)
+# New schema versions can inherit other schema version's required fields. Here, we declare `example.baz@1`
+# as an "extension" of `example.bar@1`:
+@schema "example.baz" Baz
 
-# Notice how the child schema's declaration may reference the parent's schema fields (but need not reference
-# every single one), may tighten the constraints of the parent schema's required fields, and may introduce
-# new required fields atop the parent schema's required fields.
+@version "example.baz@1 > example.bar@1" begin
+    x::Int8
+    z::String
+    k::Int64 = ismissing(k) ? length(z) : k
+end
 
-# For a given Legolas schema extension to be valid, all possible row types that comply with the child schema
-# must comply with the parent schema, but the reverse need not be true. We can check schemas' required fields
-# and their type constraints via `Legolas.schema_fields`. Based on these outputs, it is a worthwhile exercise
-# to confirm for yourself that `Baz{1}` is a valid extension of `Bar{1}` under the aforementioned rule:
-@test Legolas.schema_fields(Bar(1)) == (x=Union{Missing,Int8}, y=String, z=String)
-@test Legolas.schema_fields(Baz(1)) == (x=Int8, y=String, z=String, k=Int64)
+# Notice how the child's `@version` declaration may reference the parent's required fields (but need not reference
+# every single one), may tighten the constraints of the parent's required fields, and may introduce new required
+# fields atop the parent's required fields.
+
+# For a given Legolas schema version extension to be valid, all `Tables.Schema`s that comply with the child
+# must comply with the parent, but the reverse need not be true. We can check a schema version's required fields
+# and their type constraints via `Legolas.required_fields`. Based on these outputs, it is a worthwhile exercise
+# to confirm for yourself that `BazSchemaV1` is a valid extension of `BarSchemaV1` under the aforementioned rule:
+@test Legolas.required_fields(BarSchemaV1()) == (x=Union{Missing,Int8}, y=String, z=String)
+@test Legolas.required_fields(BazSchemaV1()) == (x=Int8, y=String, z=String, k=Int64)
 
 # As a counterexample, the following is invalid, because the declaration of `x::Any` would allow for `x`
-# values that are disallowed by the parent schema `example.bar@1`:
-@test_throws Legolas.SchemaDeclarationError @schema("example.broken@1 > example.bar@1", x::Any)
+# values that are disallowed by the parent schema version `example.bar@1`:
+@schema "example.broken" Broken
+@test_throws Legolas.SchemaVersionDeclarationError @version "example.broken@1 > example.bar@1" begin x::Any end
 
-# When `row` is evaluated against an extension schema, it will apply the parent schema's field
-# assignments before applying the child schema's field assignments. Notice how `row` applies the
-# constraints/transformations of the parent and child schemas in the below examples:
-@test row(Baz(1); x=200, y=:hi) == (x=127, z="hi_127", k=6, y="hi")
-@test_throws MethodError row(Baz(1); y=:hi) # `Baz{1}` does not allow `x::Missing`
+# Record type constructors generated for extension schema versions will apply the parent's field
+# assignments before applying the child's field assignments. Notice how `BazV1` applies the
+# constraints/transformations of both `example.baz@1` and `example.bar@1`:
+@test NamedTuple(BazV1(; x=200, y=:hi)) == (x=127, y="hi", z="hi_127", k=6)
+@test_throws MethodError BazV1(; y=:hi) # `example.baz@1` does not allow `x::Missing`
 
-# `Baz{1}`'s generated `row` method definition is thus roughly equivalent to:
+# `BazV1`'s inner constructor definition is roughly equivalent to:
 #
-#   function Legolas.row(::Baz{1}; fields...)
-#       fields = row(Bar(1), fields)
-#       return Legolas._row(Baz{1}; fields...)
-#   end
-#
-#   function Legolas._row(::Baz{1}; x=missing, z=missing, k=missing, __extra__...)
+#   function BazV1(; x=missing, y=missing, z=missing, k=missing)
+#       __p__ = BarV1(; x, y, z)
+#       x, y, z = __p__.x, __p__.y, __p__.z
 #       x::Int8 = x
 #       z::String = z
 #       k::Int = length(z)
-#       return (; x, z, k, __extra__...)
+#       return new(x, y, z, k)
 #   end
 
 # One last note on syntax: You might ask "Why use `>` as the inheritance operator instead of `<:`?" There are two reasons.
@@ -241,70 +247,78 @@ const GLOBAL_STATE = Ref(0)
 ##### Schema Versioning
 #####
 
-# Throughout this tour, every schema declaration/instance has included a mysterious integer that we've referred to
-# nonchalantly as that schema's "version". We're not going to dive into this aspect of Legolas here in the tour, but
-# please refer to this section of Legolas' documentation for more details:
+# Throughout this tour, all `@version` declarations have used the version number `1`, and thus every generated
+# record type and `SchemaVersion` alias has had the suffix `V1`. As you might guess, you can declare more than
+# a single version of any given schema, and the generated types' suffix will always match the version integer:
+
+@version "example.foo@2" begin
+    a::Float64
+    b::String
+    c::Int
+    d::Vector
+end
+
+@test FooSchemaV2() == Legolas.SchemaVersion("example.foo", 2)
+
+fields = (a=1.0, b="b", c=3, d=[1,2,3])
+@test NamedTuple(FooV2(fields)) == fields
+
+# A schema author generally needs to declare a new schema version whenever they introduce that changes are
+# considered "breaking" in a very particular Legolas-defined manner. We're not going to dive into this aspect
+# of Legolas here in the tour, but please refer to this section of Legolas' documentation for more details:
 # https://beacon-biosignals.github.io/Legolas.jl/stable/schema-concepts/#Schema-Versioning:-You-Break-It,-You-Bump-It-1
+
+#####
+##### Parameterizing Required Field Types
+#####
+# TODO `<:` syntax and `Legolas.accepted_field_type`
+
 
 #####
 ##### Validating/Writing/Reading Arrow Tables with Legolas.jl
 #####
 
-# Legolas provides special methods for reading/writing/validating Arrow tables that utilize `Legolas.Schema`s. To
-# start exploring these methods, we'll first construct a dummy table using the previously defined `Baz{1}` schema:
-baz = row(Baz(1); x=200, y=:hi)
-invalid = [baz,
-           Tables.rowmerge(baz; k="violates `k::Int64`"),
-           Tables.rowmerge(baz; z="some_other_value")]
+# Legolas provides special methods for reading/writing/validating Arrow tables with `Legolas.SchemaVersion`s.
+# To start exploring these methods, we'll first construct a dummy table using the previously defined `BazV1`:
+table = [BazV1(; x=23, y=:beep),
+         BazV1(; x=200, y=:boop, k=4),
+         BazV1(; x=23, y=:buzz, z="some_other_value")]
 
-# Oops, this table doesn't actually comply with `Baz{1}`! We can find the violation via the same
-# `find_violation` that we utilized earlier in the tour. Note our use of `Legolas.guess_schema`
-# here, which is similar to `Tables.schema` but does a little bit of extra work in order to try
-# to figure out the input's `Table.Schema` even if it's not evident from the table's type.
-@test find_violation(Legolas.guess_schema(invalid), Baz(1)) == (:k => Any)
+table_isequal(a, b) = isequal(Legolas.materialize(a), Legolas.materialize(b))
 
-# Let's fix the violation:
-table = [invalid[1], Tables.rowmerge(baz; k=123), invalid[3]]
-
-# Much better:
-@test complies_with(Legolas.guess_schema(table), Baz(1))
-
-# Legolas provides dedicated read/write functions that can perform similar schema validation while
-# (de)serializing tables to/from Arrow.
-
-# `Legolas.write(io_or_path, table, schema; kwargs...)` wraps `Arrow.write(io_or_path, table; kwargs...)`
+# `Legolas.write(dest, table, sv::Legolas.SchemaVersion; kwargs...)` wraps `Arrow.write(dest, table; kwargs...)`
 # and performs two additional operations atop the usual operations performed by that function:
 #
-# - By default, the provided Tables.jl-compliant `table` is validated against `schema` via `Legolas.validate` before
+# - By default, the provided Tables.jl-compliant `table` is validated against `sv` via `Legolas.validate` before
 #   it is actually written out. Note that this can be disabled by passing `validate=false` to `Legolas.write`.
 #
 # - `Legolas.write` ensures that the written-out Arrow table's metadata contains a `"legolas_schema_qualified"`
 #   key whose value is `Legolas.schema_identifier(schema)`. This field enables consumers of the table to
 #   perform automated (or manual) schema discovery/evolution/validation.
-table_isequal(a, b) = isequal(Legolas.materialize(a), Legolas.materialize(b))
-
 io = IOBuffer()
-Legolas.write(io, table, Baz(1))
+Legolas.write(io, table, BazSchemaV1())
 t = Arrow.Table(seekstart(io))
 @test Arrow.getmetadata(t) == Dict("legolas_schema_qualified" => "example.baz@1>example.bar@1")
 @test table_isequal(t, Arrow.Table(Arrow.tobuffer(table)))
-@test table_isequal(t, Arrow.Table(Legolas.tobuffer(table, Baz(1)))) # `Legolas.tobuffer` is analogous to `Arrow.tobuffer`
+@test table_isequal(t, Arrow.Table(Legolas.tobuffer(table, BazSchemaV1()))) # `Legolas.tobuffer` is analogous to `Arrow.tobuffer`
 
-# Similarly, Legolas provides `Legolas.read(path_or_io)`, which wraps `Arrow.Table(path_or_io)`
-# validates the deserialized `Arrow.Table` before returning it:
-@test table_isequal(Legolas.read(Legolas.tobuffer(table, Baz(1))), t)
+# Similarly, Legolas provides `Legolas.read(src)`, which wraps `Arrow.Table(src)`, but
+# validates the deserialized `Arrow.Table` against its declared schema version before
+# returning it:
+@test table_isequal(Legolas.read(Legolas.tobuffer(table, BazSchemaV1())), t)
 msg = """
-      could not extract valid `Legolas.Schema` from the `Arrow.Table` read
-      via `Legolas.read`; is it missing the expected custom metadata and/or
-      the expected \"legolas_schema_qualified\" field?
+      could not extract valid `Legolas.SchemaVersion` from the `Arrow.Table` read
+      via `Legolas.read`; is it missing the expected custom metadata and/or the
+      expected \"legolas_schema_qualified\" field?
       """
 @test_throws ArgumentError(msg) Legolas.read(Arrow.tobuffer(table))
-invalid_but_has_schema_metadata = Arrow.tobuffer(invalid; metadata=("legolas_schema_qualified" => Legolas.schema_identifier(Baz(1)),))
-@test_throws ArgumentError("field `k` has unexpected type; expected <:Int64, found Union{Missing, Int64, String}") Legolas.read(invalid_but_has_schema_metadata)
+invalid = [Tables.rowmerge(row; k=string(row.k)) for row in table]
+invalid_but_has_metadata = Arrow.tobuffer(invalid; metadata=("legolas_schema_qualified" => Legolas.identifier(BazSchemaV1()),))
+@test_throws ArgumentError("field `k` has unexpected type; expected <:Int64, found String") Legolas.read(invalid_but_has_metadata)
 
 # A note about one additional benefit of `Legolas.read`/`Legolas.write`: Unlike their Arrow.jl counterparts,
 # these functions are relatively agnostic to the types of provided path arguments. Generally, as long as a
 # given `path` supports `Base.read(path)::Vector{UInt8}` and `Base.write(path, bytes::Vector{UInt8})` then
 # `path` will work as an argument to `Legolas.read`/`Legolas.write`. At some point, we'd like to make similar
 # upstream improvements to Arrow.jl to render its API more path-type-agnostic.
-=#
+

@@ -334,10 +334,7 @@ end
     Legolas.Arrow.getmetadata(moo::Moo) = moo.meta
     moo = Moo(Dict("a" => "b", "b" => "b",
                    Legolas.LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY => "test.parent@1"))
-    @test Parent(1) == Legolas.extract_legolas_schema(moo)
-
-    t = [(a="a", c=1, b="b"), (a=1, b=2)] # not a valid Tables.jl table
-    @test_throws ErrorException Legolas.guess_schema(t)
+    @test Parent(1) == Legolas.extract_schema_version(moo)
 
     t = Arrow.tobuffer((a=[1, 2], b=[3, 4]); metadata=Dict(Legolas.LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY => "haha@3"))
     @test_throws Legolas.UnknownSchemaError Legolas.read(t)
