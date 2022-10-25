@@ -203,11 +203,18 @@ end
     y::String = string(y[1:2])
 end
 
-# this statement will induce an error if field types are not properly escaped,
-# since `UUID` will be hygeine-passed to `Legolas.UUID`, which is undefined
+# This statement will induce an error if field types are not properly escaped,
+# since `DataFrame` will be hygeine-passed to `Legolas.DataFrame`, which is undefined
 @schema "test.field-type-escape" FieldTypeEscape
 @version "test.field-type-escape@1" begin
-    x::UUID
+    x::DataFrame
+end
+
+@schema "test.accepted" Accepted
+
+@version "test.accepted@1" begin
+    id::UUID
+    sym::Symbol
 end
 
 @schema "test.new" New
@@ -284,6 +291,10 @@ end
             @test isnothing(Legolas.validate(t, s))
             @test Legolas.complies_with(t, s)
             @test isnothing(Legolas.find_violation(t, s))
+        end
+
+        for T in (UUID, UInt128), S in (Symbol, String)
+            @test Legolas.complies_with(Tables.Schema((:id, :sym), (T, S)), AcceptedSchemaV1())
         end
     end
 

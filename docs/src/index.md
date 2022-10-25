@@ -23,10 +23,9 @@ Legolas.parent
 Legolas.required_fields
 Legolas.declaration
 Legolas.declared
-Legolas.validate
-Legolas.complies_with
 Legolas.find_violation
-Legolas.accepted_field_type
+Legolas.complies_with
+Legolas.validate
 ```
 
 ## Validating/Writing/Reading Legolas Tables

@@ -3,7 +3,7 @@
 # functionality in a concrete manner, and so that we can ensure examples stay
 # current as the package evolves.
 
-using Legolas, Arrow, Tables, Test
+using Legolas, Arrow, Tables, Test, UUIDs
 
 using Legolas: @schema, @version, complies_with, find_violation, validate
 
@@ -271,7 +271,41 @@ fields = (a=1.0, b="b", c=3, d=[1,2,3])
 #####
 ##### Parameterizing Required Field Types
 #####
-# TODO `<:` syntax for required fields and `Legolas.accepted_field_type`
+
+# Sometimes, it's useful to surface a required field's type as a type parameter of the generated record type. To
+# achieve this, the `@version` macro supports use of the `<:` operator to mark fields whose types should be exposed
+# as parameters. For example:
+
+@schema "example.param" Param
+
+@version "example.param@1" begin
+    a::Int
+    b::(<:Real)
+    c
+    d::(<:Union{Real,Missing})
+end
+
+@test typeof(ParamV1(a=1, b=2.0, c="3")) === ParamV1{Float64,Missing}
+@test typeof(ParamV1(a=1, b=2.0, c="3", d=4)) === ParamV1{Float64,Int}
+@test typeof(ParamV1{Int,Missing}(a=1, b=2.0, c="3")) === ParamV1{Int,Missing}
+@test typeof(ParamV1{Int,Float32}(a=1, b=2.0, c="3", d=1)) === ParamV1{Int,Float32}
+
+# Note that extension schema versions do not implicitly "inherit" their parent's type parameters; if you'd
+# like to parameterize the type of a parent's required field in the child schema version, you should explicitly
+# include the field in the child's required field list:
+
+@schema "example.child-param" ChildParam
+
+@version "example.child-param@1 > example.param@1" begin
+    c::(<:Union{Real,String})
+    d::(<:Union{Real,Missing})
+    e
+end
+
+@test typeof(ChildParamV1(a=1, b=2.0, c="3", e=5)) === ChildParamV1{String,Missing}
+@test typeof(ChildParamV1(a=1, b=2.0, c=3, d=4, e=5)) === ChildParamV1{Int,Int}
+@test typeof(ChildParamV1{Int,Missing}(a=1, b=2.0, c=3.0, e=5)) === ChildParamV1{Int,Missing}
+@test typeof(ChildParamV1{String,Float32}(a=1, b=2.0, c="3", d=1, e=5)) === ChildParamV1{String,Float32}
 
 #####
 ##### Validating/Writing/Reading Arrow Tables with Legolas.jl
@@ -321,3 +355,40 @@ invalid_but_has_metadata = Arrow.tobuffer(invalid; metadata=("legolas_schema_qua
 # `path` will work as an argument to `Legolas.read`/`Legolas.write`. At some point, we'd like to make similar
 # upstream improvements to Arrow.jl to render its API more path-type-agnostic.
 
+#####
+##### Schema Version Portability (`Legolas.accepted_field_type`)
+#####
+
+# Consider the following schema version:
+
+@schema "example.portable" Portable
+
+@version "example.portable@1" begin
+    id::UUID = UUID(id)
+end
+
+# Here, `PortableV1` will convert inputs into `UUID`s as part of construction. This behavior may be desirable in many cases,
+# but this definition actually has interesting implications for *portability* of this schema's notion of compliance. In particular,
+# this schema version carries an implicit requirement that schema-compliant Arrow data must be Julia-produced; Arrow itself doesn't
+# define a native UUID type, so other languages may very well (de)serialize UUIDs as 128-bit binary values in a manner that Arrow.jl
+# might not recognize as Julia's UUID type.
+
+# Thus, while this schema version implies that the only compliant `Tables.Schema` is `Tables.Schema((:id,), (UUID,))`,
+# it is actually desirable to also consider `Tables.Schema((:id,), (UInt128,))` to be compliant in order to support
+# non-Julia-produced data. It'd be annoying, though, to need to alter our `PortableV1` constructor just to suit this purpose,
+# since its UUID conversion behavior (and the corresponding type constraint) may be useful for validated construction.
+
+# Luckily, it turns out that Legolas is actually smart enough to natively support this by default:
+@test complies_with(Tables.Schema((:id,), (UUID,)), PortableSchemaV1())
+@test complies_with(Tables.Schema((:id,), (UInt128,)), PortableSchemaV1())
+
+# How is this possible? Well, when Legolas checks whether a given field `f::T` matches a required field `f::F`, it doesn't
+# directly check that `T <: F`; instead, it checks that `T <: Legolas.accepted_field_type(sv, F)` where `sv` is the relevant
+# `SchemaVersion`. The fallback definition of `Legolas.accepted_field_type(::SchemaVersion, F::Type)` is simply `F`, but there
+# are a few other default overloads to support common Base types that can cause portability issues:
+#
+#    accepted_field_type(::SchemaVersion, ::Type{UUID}) = Union{UUID,UInt128}
+#    accepted_field_type(::SchemaVersion, ::Type{Symbol}) = Union{Symbol,String}
+#
+# Schema version authors should feel free to override these `Legolas.accepted_field_type` definitions (and/or add new definitions)
+# for their own `SchemaVersion` types.

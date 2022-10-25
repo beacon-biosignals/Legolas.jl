@@ -216,21 +216,16 @@ Arrow.ArrowTypes.fromarrow(::Type{<:SchemaVersion}, id) = first(parse_identifier
 ##### `Tables.Schema` validation
 #####
 
-"""
-    Legolas.accepted_field_type(sv::SchemaVersion, T::Type)
-
-TODO
-
-"""
 @inline accepted_field_type(::SchemaVersion, T) = T
 accepted_field_type(::SchemaVersion, ::Type{UUID}) = Union{UUID,UInt128}
+accepted_field_type(::SchemaVersion, ::Type{Symbol}) = Union{Symbol,String}
 
 """
     Legolas.find_violation(ts::Tables.Schema, sv::Legolas.SchemaVersion)
 
 For required field `f::F` of `sv`:
 
-- Define `A = Legolas.accepted_field_type(F)`
+- Define `A = Legolas.accepted_field_type(sv, F)`
 - If `f::T` is present in `ts`, ensure that `T <: A` or else immediately return `f::Symbol => T::DataType`.
 - If `f` isn't present in `ts`, ensure that `Missing <: A` or else immediately return `f::Symbol => missing::Missing`.
 
