@@ -93,20 +93,19 @@ function parse_identifier(id::AbstractString)
 end
 
 #####
-##### `UnknownSchemaError`
+##### `UnknownSchemaVersionError`
 #####
 
-struct UnknownSchemaError <: Exception
-    name::String
-    version::Union{Int,Nothing}
+struct UnknownSchemaVersionError <: Exception
+    schema_version::SchemaVersion
 end
 
-UnknownSchemaError(sv::SchemaVersion) = UnknownSchemaError(name(sv), version(sv))
-
-function Base.showerror(io::IO, e::UnknownSchemaError)
-    print(io, "UnknownSchemaError: encountered unknown Legolas schema with name=\"$(e.name)\"")
-    isnothing(e.version) || print(io, ", version=$(e.version)")
+function Base.showerror(io::IO, e::UnknownSchemaVersionError)
     print(io, """
+              UnknownSchemaVersionError: encountered unknown Legolas schema version:
+
+                name=\"$(name(e.schema_version))\"
+                version=$(version(e.schema_version))
 
               This generally indicates that this schema has not been declared (i.e.
               the corresponding `@schema` and/or `@version` statements have not been
@@ -164,7 +163,7 @@ Return this `Legolas.SchemaVersion`'s fully qualified schema version identifier.
 as the `\"$LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY\"` field value in table metadata for table
 written via [`Legolas.write`](@ref).
 """
-identifier(sv::SchemaVersion) = throw(UnknownSchemaError(sv))
+identifier(sv::SchemaVersion) = throw(UnknownSchemaVersionError(sv))
 
 """
     Legolas.required_fields(sv::Legolas.SchemaVersion)
@@ -175,7 +174,7 @@ Return a `NamedTuple{...,Tuple{Vararg{DataType}}` whose fields take the form:
 
 If `sv` has a parent, the returned fields will include `required_fields(parent(sv))`.
 """
-required_fields(sv::SchemaVersion) = throw(UnknownSchemaError(sv))
+required_fields(sv::SchemaVersion) = throw(UnknownSchemaVersionError(sv))
 
 """
     Legolas.declaration(sv::Legolas.SchemaVersion)
@@ -194,7 +193,13 @@ where `RequiredFieldInfo` has the fields:
 Note that `declaration` is primarily intended to be used for interactive discovery purposes, and
 does not include the contents of `declaration(parent(sv))`.
 """
-declaration(sv::SchemaVersion) = throw(UnknownSchemaError(sv))
+declaration(sv::SchemaVersion) = throw(UnknownSchemaVersionError(sv))
+
+#####
+##### `SchemaVersion` printing
+#####
+
+Base.show(io::IO, sv::SchemaVersion) = print(io, "SchemaVersion(\"$(name(sv))\", $(version(sv)))")
 
 #####
 ##### `SchemaVersion` Arrow (de)serialization
@@ -227,7 +232,7 @@ Otherwise, return `nothing`.
 
 See also: [`Legolas.validate`](@ref), [`Legolas.complies_with`](@ref)
 """
-find_violation(::Tables.Schema, sv::SchemaVersion) = throw(UnknownSchemaError(sv))
+find_violation(::Tables.Schema, sv::SchemaVersion) = throw(UnknownSchemaVersionError(sv))
 
 function _find_violation end
 
@@ -351,8 +356,8 @@ end
 _validate_wrt_parent(::NamedTuple, ::Nothing) = nothing
 
 function _validate_wrt_parent(child_fields::NamedTuple, parent::SchemaVersion)
-    declared(parent) || throw(SchemaVersionDeclarationError("parent schema cannot be used before it has been declared: $parent"))
-    _has_valid_child_field_types(child_fields, required_fields(parent)) || throw(SchemaVersionDeclarationError("declared field types violate parent schema's field types"))
+    declared(parent) || throw(SchemaVersionDeclarationError("parent schema version cannot be used before it has been declared: $parent"))
+    _has_valid_child_field_types(child_fields, required_fields(parent)) || throw(SchemaVersionDeclarationError("declared field types violate parent's field types"))
     return nothing
 end
 
@@ -615,7 +620,7 @@ macro version(id, required_field_statements)
     quoted_schema_version_type = Base.Meta.quot(typeof(schema_version))
     quoted_parent = Base.Meta.quot(parent)
     type_prefix = schema_type_prefix(Val(name(schema_version)))
-    isnothing(type_prefix) && return :(throw(SchemaVersionDeclarationError(string($(name(schema_version)), "must be declared via `@schema` before its initial `@version` declaration"))))
+    isnothing(type_prefix) && return :(throw(SchemaVersionDeclarationError("`" * $(string(name(schema_version))) * "` must be declared via `@schema` before its initial `@version` declaration")))
 
     # basic accessor function definitions
     full_identifier_string = string(name(schema_version), '@', version(schema_version))
@@ -631,7 +636,7 @@ macro version(id, required_field_statements)
 
     return quote
         if Legolas.declared($quoted_schema_version) && Legolas.declaration($quoted_schema_version) != $check_against_declaration
-            throw(SchemaVersionDeclarationError("invalid redeclaration of existing schema; all `@schema` redeclarations must exactly match previous declarations"))
+            throw(SchemaVersionDeclarationError("invalid redeclaration of existing schema version; all `@version` redeclarations must exactly match previous declarations"))
         else
             Legolas._validate_wrt_parent($field_names_types, $quoted_parent)
 

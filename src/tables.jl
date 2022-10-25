@@ -170,7 +170,7 @@ function read(io_or_path; validate::Bool=true)
         catch
             @warn """
                   The `Tables.Schema` of the `Arrow.Table` read via `Legolas.read(io_or_path)` does not appear to
-                  comply with the `Legolas.Schema` indicated by the table's metadata ($sv). Try invoking
+                  comply with the `Legolas.SchemaVersion` indicated by the table's metadata (`$sv`). Try invoking
                   `Legolas.read(io_or_path; validate=false)` to inspect the table.
                   """
             rethrow()
