@@ -20,10 +20,13 @@ Legolas.name
 Legolas.version
 Legolas.identifier
 Legolas.parent
-Legolas.fields
+Legolas.required_fields
 Legolas.declaration
 Legolas.declared
-Legolas.row
+Legolas.validate
+Legolas.complies_with
+Legolas.find_violation
+Legolas.accepted_field_type
 ```
 
 ## Validating/Writing/Reading Legolas Tables

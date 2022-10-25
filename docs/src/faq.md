@@ -8,6 +8,6 @@ The package originated from code developed internally at Beacon to wrangling het
 
 ## Why does Legolas.jl support Arrow as a (de)serialization target, but not, say, JSON?
 
-Technically, Legolas.jl's core `row`/`Schema` functionality is totally agnostic to (de)serialization and could be useful for anybody who wants to wrangle Tables.jl-compliant values.
+Technically, Legolas.jl's core `@schema`/`@version` functionality is agnostic to (de)serialization and could be useful for anybody who wants to wrangle Tables.jl-compliant values.
 
 Otherwise, with regards to (de)serialization-specific functionality, Beacon has put effort into ensuring Legolas.jl works well with [Arrow.jl](https://github.com/JuliaData/Arrow.jl) "by default" simply because we're heavy users of the Arrow format. There's nothing stopping users from composing the package with [JSON3.jl](https://github.com/quinnj/JSON3.jl) or other packages.

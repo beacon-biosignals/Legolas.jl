@@ -216,6 +216,12 @@ Arrow.ArrowTypes.fromarrow(::Type{<:SchemaVersion}, id) = first(parse_identifier
 ##### `Tables.Schema` validation
 #####
 
+"""
+    Legolas.accepted_field_type(sv::SchemaVersion, T::Type)
+
+TODO
+
+"""
 @inline accepted_field_type(::SchemaVersion, T) = T
 accepted_field_type(::SchemaVersion, ::Type{UUID}) = Union{UUID,UInt128}
 

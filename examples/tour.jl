@@ -271,8 +271,7 @@ fields = (a=1.0, b="b", c=3, d=[1,2,3])
 #####
 ##### Parameterizing Required Field Types
 #####
-# TODO `<:` syntax and `Legolas.accepted_field_type`
-
+# TODO `<:` syntax for required fields and `Legolas.accepted_field_type`
 
 #####
 ##### Validating/Writing/Reading Arrow Tables with Legolas.jl
