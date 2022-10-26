@@ -203,6 +203,12 @@ end
     y::String = string(y[1:2])
 end
 
+@schema "test.nested" Nested
+@version "test.nested@1" begin
+    gc::GrandchildV1
+    k::String
+end
+
 # This statement will induce an error if field types are not properly escaped,
 # since `DataFrame` will be hygeine-passed to `Legolas.DataFrame`, which is undefined
 @schema "test.field-type-escape" FieldTypeEscape
@@ -211,7 +217,6 @@ end
 end
 
 @schema "test.accepted" Accepted
-
 @version "test.accepted@1" begin
     id::UUID
     sym::Symbol
@@ -327,16 +332,22 @@ end
 
     # Note that Arrow.jl roundtrips z=:three to z="three", since
     # `z::Symbol` isn't evident from these record types
+    r0_roundtripped = Tables.rowmerge(r0; z="three")
 
     tbl = Arrow.Table(Arrow.tobuffer((; x=[ChildV1(r0)])))
-    @test tbl.x[1] == ChildV1(Tables.rowmerge(r0; z="three"))
+    @test tbl.x[1] == ChildV1(r0_roundtripped)
 
     tbl = Arrow.Table(Arrow.tobuffer((; x=[GrandchildV1(r0)])))
-    @test tbl.x[1] == GrandchildV1(Tables.rowmerge(r0; z="three"))
+    @test tbl.x[1] == GrandchildV1(r0_roundtripped)
 
     svs = [GrandchildSchemaV1(), ChildSchemaV1(), ParentSchemaV1()]
     tbl = Arrow.Table(Arrow.tobuffer((; sv=svs)))
     @test all(tbl.sv .== svs)
+
+    tbl = [NestedV1(; gc=GrandchildV1(r0), k="test")]
+    roundtripped = Legolas.read(Legolas.tobuffer(tbl, NestedSchemaV1()))
+    @test roundtripped.gc[1] == GrandchildV1(r0_roundtripped)
+    @test roundtripped.k[1] == "test"
 end
 
 @testset "miscellaneous Legolas/src/tables.jl tests" begin
