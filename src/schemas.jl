@@ -28,7 +28,7 @@ For more details and examples, please see `Legolas.jl/examples/tour.jl` and the
 "Schema-Related Concepts/Conventions" section of the Legolas.jl documentation.
 
 The constructor `SchemaVersion{name,version}()` will throw an `ArgumentError` if `version` is
-not non-negative.
+negative.
 
 See also: [`Legolas.@schema`](@ref)
 """
