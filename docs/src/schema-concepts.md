@@ -13,7 +13,7 @@ Legolas defines "schema version identifiers" as strings of the form:
     - `version` is a non-negative integer.
 - or, `x>y` where `x` and `y` are valid schema version identifiers and `>` denotes "extends from".
 
-A schema version identifier is said to be *fully qualified* if it includes the identifiers of all known ancestors of the particular schema version that it directly identifies.
+A schema version identifier is said to be *fully qualified* if it includes the identifiers of all ancestors of the particular schema version that it directly identifies.
 
 Schema authors should follow the below conventions when choosing the name of a new schema:
 
