@@ -110,7 +110,7 @@ end
 
 bad_id_message(x) = "failed to parse seemingly invalid/malformed schema version identifier string: \"$x\""
 bad_name_message(x) = "argument is not a valid `Legolas.SchemaVersion` name: \"$x\""
-bad_version_message(x) = "`version` in `SchemaVersion{_,version}` must be a non-negative integer, received: $x"
+bad_version_message(x) = "`version` in `SchemaVersion{_,version}` must be a non-negative integer, received: `($x)::$(typeof(x))`"
 
 function bad_version_declaration_message(id, err)
     return "Error encountered attempting to parse schema version identifier.\n" *
