@@ -34,7 +34,7 @@ See also: [`Legolas.@schema`](@ref)
 """
 struct SchemaVersion{n,v}
     function SchemaVersion{n,v}() where {n,v}
-        v isa Integer && v >= 0 || throw(ArgumentError("`version` in `SchemaVersion{_,version}` must be a non-negative integer, received: $v"))
+        v isa Integer && v >= 0 || throw(ArgumentError("`version` in `SchemaVersion{_,version}` must be a non-negative integer, received: $v (of type $(typeof(v))"))
         return new{n,v}()
     end
 end
