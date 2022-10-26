@@ -35,6 +35,8 @@ For example, a schema author must introduce a new schema version for any of the 
 
 One benefit of Legolas' approach is that multiple schema versions may be defined in the same codebase, e.g. there's nothing that prevents `@version("my-schema@1", ...)` and `@version("my-schema@2", ...)` from being defined and utilized simultaneously. The source code that defines any given Legolas schema version and/or consumes/produces Legolas tables is presumably already semantically versioned, such that consumer/producer packages can determine their compatibility with each other in the usual manner via interpreting major/minor/patch increments.
 
+Note that it is preferable to avoid introducing new versions of an existing schema, if possible, in order to minimize code/data churn for downstream producers/consumers. Thus, authors should prefer conservative field type restrictions from the get-go. Remember: loosening a field type restriction is not a breaking change, but tightening one is.
+
 ## Important Expectations Regarding Custom Field Assignments
 
 Schema authors should ensure that their `@version` declarations meet two important expectations so that generated record types behaves as intended:
@@ -48,10 +50,3 @@ Thus, given a Legolas-generated record type `R`, the following should hold for a
 R(R(fields)) == R(fields)
 R(fields) == R(fields)
 ```
-
-## How to Avoid Breaking Schema Changes
-
-It is preferable to avoid introducing a new version of an existing schema whenever possible to avoid code/data churn for consumers. Following the below guidelines should help make breaking changes less likely:
-
-1. Prefer conservative field type restrictions from the get-go, to avoid needing to tighten them later.
-2. Handle/enforce "potential deprecation paths" in a required field's RHS definition when possible. For example, imagine a schema that contains a required field `id::Union{UUID,String}` where `id` is either a `UUID`, or a `String` that may be parsed as a `UUID`. Now, let's imagine we decided we wanted to update the schema such that new tables ALWAYS normalize `id` to a proper `UUID`. In this case, it is preferable to simply update this required field to `id::Union{UUID,String} = UUID(id)` instead of `id::UUID`. The latter is a breaking change that requires introducing a new schema version, while the former achieves the same practical result without breaking consumers of old data. TODO update this guidance in light of `Legolas.accepted_field_type`.

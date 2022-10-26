@@ -368,9 +368,9 @@ invalid_but_has_metadata = Arrow.tobuffer(invalid; metadata=("legolas_schema_qua
 end
 
 # Here, `PortableV1` will convert inputs into `UUID`s as part of construction. This behavior may be desirable in many cases,
-# but this definition actually has interesting implications for *portability* of this schema's notion of compliance. In particular,
-# this schema version carries an implicit requirement that schema-compliant Arrow data must be Julia-produced; Arrow itself doesn't
-# define a native UUID type, so other languages may very well (de)serialize UUIDs as 128-bit binary values in a manner that Arrow.jl
+# but this definition actually has interesting implications for this schema's notion of compliance. In particular, this schema
+# version carries an implicit requirement that schema-compliant Arrow data must be Julia-produced; Arrow itself doesn't define
+# a native UUID type, so other languages may very well (de)serialize UUIDs as 128-bit binary values in a manner that Arrow.jl
 # might not recognize as Julia's UUID type.
 
 # Thus, while this schema version implies that the only compliant `Tables.Schema` is `Tables.Schema((:id,), (UUID,))`,
