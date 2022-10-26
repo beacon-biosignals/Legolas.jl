@@ -237,11 +237,12 @@ end
 #       return new(x, y, z, k)
 #   end
 
-# One last note on syntax: You might ask "Why use `>` as the inheritance operator instead of `<:`?" There are two reasons.
-# The primary reason is purely historical: earlier versions of Legolas did not as rigorously demand/enforce subtyping
-# relationships between parent and child schemas' required fields, and so the `<:` operator was considered to be a bit
-# too misleading. A secondary reason in favor of `>` was that it implied the actual order of application of field
-# constraints/transformations (i.e. the parent's are applied before the child's).
+# One last note on syntax: You might ask "Why use the greater-than symbol as the inheritance operator instead of `<:`?"
+# There are a few reasons. The primary reason is purely historical: earlier versions of Legolas did not as rigorously
+# demand/enforce subtyping relationships between parent and child schemas' required fields, and so the `<:` operator
+# was considered to be a bit too misleading. A secondary reason in favor of `>` was that it implied the actual order
+# of application of constraints (i.e. the parent's are applied before the child's). Lastly, `>` aligns well with the
+# property that child schema versions have a greater number of constraints than their parents.
 
 #####
 ##### Schema Versioning
