@@ -11,24 +11,27 @@ CurrentModule = Legolas
 ## Legolas `Schema`s
 
 ```@docs
-Legolas.Schema
+Legolas.SchemaVersion
 Legolas.@schema
+Legolas.@version
 Legolas.is_valid_schema_name
-Legolas.parse_schema_identifier
-Legolas.schema_name
-Legolas.schema_version
-Legolas.schema_identifier
-Legolas.schema_parent
-Legolas.schema_fields
-Legolas.schema_declaration
-Legolas.schema_declared
-Legolas.row
+Legolas.parse_identifier
+Legolas.name
+Legolas.version
+Legolas.identifier
+Legolas.parent
+Legolas.required_fields
+Legolas.declaration
+Legolas.declared
+Legolas.find_violation
+Legolas.complies_with
+Legolas.validate
 ```
 
 ## Validating/Writing/Reading Legolas Tables
 
 ```@docs
-Legolas.extract_legolas_schema
+Legolas.extract_schema_version
 Legolas.write
 Legolas.read
 ```
@@ -38,7 +41,6 @@ Legolas.read
 ```@docs
 Legolas.lift
 Legolas.construct
-Legolas.guess_schema
 Legolas.assign_to_table_metadata!
 Legolas.gather
 Legolas.locations

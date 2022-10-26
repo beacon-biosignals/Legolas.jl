@@ -19,7 +19,6 @@ Returns a curried function, `x -> lift(f,x)`
 """
 lift(f) = Base.Fix1(lift, f)
 
-
 """
     construct(T::Type, x)
 
