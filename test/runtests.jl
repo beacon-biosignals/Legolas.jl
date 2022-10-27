@@ -194,7 +194,13 @@ end
 @schema "test.nested" Nested
 @version NestedV1 begin
     gc::GrandchildV1
-    k::String
+    k::(<:Any)
+end
+
+@schema "test.nested-again" NestedAgain
+@version NestedAgainV1 begin
+    n::(<:NestedV1)
+    h::(<:Any)
 end
 
 # This statement will induce an error if field types are not properly escaped,
@@ -345,6 +351,11 @@ end
     roundtripped = Legolas.read(Legolas.tobuffer(tbl, NestedV1SchemaVersion()))
     @test roundtripped.gc[1] == GrandchildV1(r0_roundtripped)
     @test roundtripped.k[1] == "test"
+
+    tbl = [NestedAgainV1(; n=NestedV1(; gc=GrandchildV1(r0), k="test"), h=3)]
+    roundtripped = Legolas.read(Legolas.tobuffer(tbl, NestedAgainV1SchemaVersion()))
+    @test roundtripped.n[1] == NestedV1(; gc=GrandchildV1(r0_roundtripped), k="test")
+    @test roundtripped.h[1] == 3
 end
 
 @testset "miscellaneous Legolas/src/tables.jl tests" begin
