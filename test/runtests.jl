@@ -112,12 +112,6 @@ bad_id_message(x) = "failed to parse seemingly invalid/malformed schema version 
 bad_name_message(x) = "argument is not a valid `Legolas.SchemaVersion` name: \"$x\""
 bad_version_message(x) = "`version` in `SchemaVersion{_,version}` must be a non-negative integer, received: `($x)::$(typeof(x))`"
 
-function bad_version_declaration_message(id, err)
-    return "Error encountered attempting to parse schema version identifier.\n" *
-           "Received: \"$id\"\n" *
-           "Encountered: ArgumentError: " * err
-end
-
 @testset "Legolas.parse_identifier and related code" begin
     good_schema_names = ("foo", "test.foo", "test.foo-bar", ".-technically-allowed-.")
     good_versions = (0, 1, 2, 3)
@@ -135,14 +129,12 @@ end
         @test_throws ArgumentError(bad_version_message(v)) SchemaVersion(n, v)
         id = "$n@$v"
         @test_throws ArgumentError(bad_version_message(v)) Legolas.parse_identifier(id)
-        @test_throws SchemaVersionDeclarationError(bad_version_declaration_message(id, bad_version_message(v))) @eval(@version($id, begin x end))
     end
 
     for n in bad_schema_names, v in Iterators.flatten((bad_versions, good_versions))
         @test_throws ArgumentError(bad_name_message(n)) SchemaVersion(n, v)
         id = "$n@$v"
         @test_throws ArgumentError(bad_name_message(n)) Legolas.parse_identifier(id)
-        @test_throws SchemaVersionDeclarationError(bad_version_declaration_message(id, bad_name_message(n))) @eval(@version($id, begin x end))
     end
 
     for n in good_schema_names, m in good_schema_names
@@ -151,7 +143,6 @@ end
         @test Legolas.parse_identifier("$n@1 >$m@0 > bob@3 ") == [SchemaVersion(n, 1), SchemaVersion(m, 0), SchemaVersion("bob", 3)]
         id = "$n@1 >$m @0 > bob@3 "
         @test_throws ArgumentError(bad_name_message("$m ")) Legolas.parse_identifier(id)
-        @test_throws SchemaVersionDeclarationError(bad_version_declaration_message(id, bad_name_message("$m "))) @eval(@version($id, begin x end))
         for bad_id in ("$n>$m@1",
                        "$n@1>$m",
                        "$n@>$m@",
@@ -159,12 +150,10 @@ end
                        "$n@>$m",
                        "$n>$m")
             @test_throws ArgumentError(bad_id_message(bad_id)) Legolas.parse_identifier(bad_id)
-            @test_throws SchemaVersionDeclarationError(bad_version_declaration_message(bad_id, bad_id_message(bad_id))) @eval(@version($bad_id, begin x end))
         end
         for bad_separator in ("<", "<:", ":", "=")
             id = "$n@1" * bad_separator * "$m@0"
             @test_throws ArgumentError(bad_id_message(id)) Legolas.parse_identifier(id)
-            @test_throws SchemaVersionDeclarationError(bad_version_declaration_message(id, bad_id_message(id))) @eval(@version($id, begin x end))
         end
     end
 
@@ -174,7 +163,6 @@ end
                    "bob@1>$bad@0>$good@3",
                    "$good@1>bob@0>$bad@3")
             @test_throws ArgumentError(bad_name_message(bad)) Legolas.parse_identifier(id)
-            @test_throws SchemaVersionDeclarationError(bad_version_declaration_message(id, bad_name_message(bad))) @eval(@version($id, begin x end))
         end
     end
 end
@@ -187,24 +175,24 @@ end
 end
 
 @schema "test.parent" Parent
-@version "test.parent@1" begin
+@version ParentV1 begin
     x::Vector
     y::AbstractString
 end
 
 @schema "test.child" Child
-@version "test.child@1 > test.parent@1" begin
+@version ChildV1 > ParentV1 begin
     z
 end
 
 @schema "test.grandchild" Grandchild
-@version "test.grandchild@1 > test.child@1" begin
+@version GrandchildV1 > ChildV1 begin
     a::Int32 = round(Int32, a)
     y::String = string(y[1:2])
 end
 
 @schema "test.nested" Nested
-@version "test.nested@1" begin
+@version NestedV1 begin
     gc::GrandchildV1
     k::String
 end
@@ -212,12 +200,12 @@ end
 # This statement will induce an error if field types are not properly escaped,
 # since `DataFrame` will be hygeine-passed to `Legolas.DataFrame`, which is undefined
 @schema "test.field-type-escape" FieldTypeEscape
-@version "test.field-type-escape@1" begin
+@version FieldTypeEscapeV1 begin
     x::DataFrame
 end
 
 @schema "test.accepted" Accepted
-@version "test.accepted@1" begin
+@version AcceptedV1 begin
     id::UUID
     sym::Symbol
 end
@@ -226,46 +214,55 @@ end
 
 @testset "`Legolas.@version` and associated utilities for declared `Legolas.SchemaVersion`s" begin
     @testset "Legolas.SchemaVersionDeclarationError" begin
-        @test_throws SchemaVersionDeclarationError("malformed or missing declaration of required fields") @version("name@1", begin end)
-        @test_throws SchemaVersionDeclarationError("schema version identifier must be a string literal") @version(id, begin x end)
-        @test_throws SchemaVersionDeclarationError("schema version identifier should specify at most one parent, found multiple: " *
-                                                   "SchemaVersion[SchemaVersion(\"bob\", 1), SchemaVersion(\"dave\", 1), SchemaVersion(\"joe\", 1)]") @version("bob@1 > dave@1 > joe@1", begin x end)
-        @test_throws SchemaVersionDeclarationError("cannot have duplicate field names in `@version` declaration; recieved: $([:x, :y, :x, :z])") @version("name@1", begin x; y; x; z end)
-        @test_throws SchemaVersionDeclarationError("parent schema version cannot be used before it has been declared: SchemaVersion(\"test.parent\", 2)") @version("test.child@2 > test.parent@2", begin x end)
-
-        @test_throws SchemaVersionDeclarationError("`new` must be declared via `@schema` before its initial `@version` declaration") @version("new@1 > test.parent@1", begin y::Int end)
-        @test_throws SchemaVersionDeclarationError("declared field types violate parent's field types") @version("test.new@1 > test.parent@1", begin y::Int end)
-        @test_throws SchemaVersionDeclarationError("declared field types violate parent's field types") @version("test.new@1 > test.child@1", begin y::Int end)
-        @test_throws SchemaVersionDeclarationError("invalid redeclaration of existing schema version; all `@version` redeclarations must exactly match previous declarations") @version("test.parent@1", begin x; y end)
-        @test_throws SchemaVersionDeclarationError("malformed `@version` field expression: f()") @version("test.child@2", begin f() end)
+        @test_throws SchemaVersionDeclarationError("malformed or missing declaration of required fields") @version(ChildV2, begin end)
+        @test_throws SchemaVersionDeclarationError("provided record type symbol references undeclared schema: UnknownV1") @version(UnknownV1 > ChildV1, begin x end)
+        @test_throws SchemaVersionDeclarationError("provided record type symbol references undeclared schema: UnknownV1") @version(ChildV1 > UnknownV1, begin x end)
+        @test_throws SchemaVersionDeclarationError("provided record type symbol is malformed: Child") @version(Child, begin x end)
+        @test_throws SchemaVersionDeclarationError("provided record type symbol is malformed: Childv2") @version(Childv2, begin x end)
+        @test_throws SchemaVersionDeclarationError("provided record type symbol is malformed: ChildV") @version(ChildV, begin x end)
+        @test_throws SchemaVersionDeclarationError("provided record type symbol is malformed: ChildVTwo") @version(ChildVTwo, begin x end)
+        @test_throws SchemaVersionDeclarationError("provided record type symbol is malformed: Parent") @version(ChildV1 > Parent, begin x end)
+        @test_throws SchemaVersionDeclarationError("provided record type symbol is malformed: Parentv2") @version(ChildV1 > Parentv2, begin x end)
+        @test_throws SchemaVersionDeclarationError("provided record type symbol is malformed: ParentV") @version(ChildV1 > ParentV, begin x end)
+        @test_throws SchemaVersionDeclarationError("provided record type symbol is malformed: ParentVTwo") @version(ChildV1 > ParentVTwo, begin x end)
+        @test_throws SchemaVersionDeclarationError("provided record type expression is malformed: BobV1 > DaveV1 > JoeV1") @version(BobV1 > DaveV1 > JoeV1, begin x end)
+        @test_throws SchemaVersionDeclarationError("provided record type expression is malformed: BobV1 < DaveV1") @version(BobV1 < DaveV1, begin x end)
+        @test_throws SchemaVersionDeclarationError("cannot have duplicate field names in `@version` declaration; recieved: $([:x, :y, :x, :z])") @version(ChildV2, begin x; y; x; z end)
+        @test_throws SchemaVersionDeclarationError("parent schema version cannot be used before it has been declared: SchemaVersion(\"test.parent\", 2)") @version(ChildV2 > ParentV2, begin x end)
+        @test_throws SchemaVersionDeclarationError("parent schema version cannot be used before it has been declared: SchemaVersion(\"test.new\", 1)") @version(ChildV2 > NewV1, begin y::Int end)
+        @test_throws SchemaVersionDeclarationError("cannot extend from a different version of the same schema") @version(ChildV2 > ChildV1, begin x end)
+        @test_throws SchemaVersionDeclarationError("declared field types violate parent's field types") @version(NewV1 > ParentV1, begin y::Int end)
+        @test_throws SchemaVersionDeclarationError("declared field types violate parent's field types") @version(NewV1 > ChildV1, begin y::Int end)
+        @test_throws SchemaVersionDeclarationError("invalid redeclaration of existing schema version; all `@version` redeclarations must exactly match previous declarations") @version(ParentV1, begin x; y end)
+        @test_throws SchemaVersionDeclarationError("malformed `@version` field expression: f()") @version(ChildV2, begin f() end)
     end
 
     undeclared = SchemaVersion("undeclared", 3)
 
     @testset "Legolas.declared" begin
         @test !Legolas.declared(undeclared)
-        @test all(Legolas.declared, (ParentSchemaV1(), ChildSchemaV1(), GrandchildSchemaV1()))
+        @test all(Legolas.declared, (ParentV1SchemaVersion(), ChildV1SchemaVersion(), GrandchildV1SchemaVersion()))
     end
 
     @testset "Legolas.parent" begin
         @test isnothing(Legolas.parent(undeclared))
-        @test isnothing(Legolas.parent(ParentSchemaV1()))
-        @test Legolas.parent(ChildSchemaV1()) == ParentSchemaV1()
-        @test Legolas.parent(GrandchildSchemaV1()) == ChildSchemaV1()
+        @test isnothing(Legolas.parent(ParentV1SchemaVersion()))
+        @test Legolas.parent(ChildV1SchemaVersion()) == ParentV1SchemaVersion()
+        @test Legolas.parent(GrandchildV1SchemaVersion()) == ChildV1SchemaVersion()
     end
 
     @testset "Legolas.identifier" begin
         @test_throws Legolas.UnknownSchemaVersionError(undeclared) Legolas.identifier(undeclared)
-        @test Legolas.identifier(ParentSchemaV1()) == "test.parent@1"
-        @test Legolas.identifier(ChildSchemaV1()) == "test.child@1>test.parent@1"
-        @test Legolas.identifier(GrandchildSchemaV1()) == "test.grandchild@1>test.child@1>test.parent@1"
+        @test Legolas.identifier(ParentV1SchemaVersion()) == "test.parent@1"
+        @test Legolas.identifier(ChildV1SchemaVersion()) == "test.child@1>test.parent@1"
+        @test Legolas.identifier(GrandchildV1SchemaVersion()) == "test.grandchild@1>test.child@1>test.parent@1"
     end
 
     @testset "Legolas.required_fields" begin
         @test_throws Legolas.UnknownSchemaVersionError(undeclared) Legolas.required_fields(undeclared)
-        @test Legolas.required_fields(ParentSchemaV1()) == (x=Vector, y=AbstractString)
-        @test Legolas.required_fields(ChildSchemaV1()) == (x=Vector, y=AbstractString, z=Any)
-        @test Legolas.required_fields(GrandchildSchemaV1()) == (x=Vector, y=String, z=Any, a=Int32)
+        @test Legolas.required_fields(ParentV1SchemaVersion()) == (x=Vector, y=AbstractString)
+        @test Legolas.required_fields(ChildV1SchemaVersion()) == (x=Vector, y=AbstractString, z=Any)
+        @test Legolas.required_fields(GrandchildV1SchemaVersion()) == (x=Vector, y=String, z=Any, a=Int32)
     end
 
     @testset "Legolas.find_violation + Legolas.complies_with + Legolas.validate" begin
@@ -278,38 +275,38 @@ end
         # functions work as expected w.r.t. schema extension in particular.
 
         t = Tables.Schema((:a, :y, :z), (Int32, String, Any))
-        for s in (GrandchildSchemaV1(), ChildSchemaV1(), ParentSchemaV1())
+        for s in (GrandchildV1SchemaVersion(), ChildV1SchemaVersion(), ParentV1SchemaVersion())
             @test_throws ArgumentError("could not find expected field `x` in $t") Legolas.validate(t, s)
             @test !Legolas.complies_with(t, s)
             @test isequal(Legolas.find_violation(t, s), :x => missing)
         end
 
         t = Tables.Schema((:x, :a, :y), (ComplexF64, Int32, String))
-        for s in (GrandchildSchemaV1(), ChildSchemaV1(), ParentSchemaV1())
+        for s in (GrandchildV1SchemaVersion(), ChildV1SchemaVersion(), ParentV1SchemaVersion())
             @test_throws ArgumentError("field `x` has unexpected type; expected <:$(Vector), found $(Complex{Float64})") Legolas.validate(t, s)
             @test !Legolas.complies_with(t, s)
             @test isequal(Legolas.find_violation(t, s), :x => ComplexF64)
         end
 
         t = Tables.Schema((:x, :a, :y), (Vector, Int32, String))
-        for s in (GrandchildSchemaV1(), ChildSchemaV1(), ParentSchemaV1())
+        for s in (GrandchildV1SchemaVersion(), ChildV1SchemaVersion(), ParentV1SchemaVersion())
             @test isnothing(Legolas.validate(t, s))
             @test Legolas.complies_with(t, s)
             @test isnothing(Legolas.find_violation(t, s))
         end
 
         for T in (UUID, UInt128), S in (Symbol, String)
-            @test Legolas.complies_with(Tables.Schema((:id, :sym), (T, S)), AcceptedSchemaV1())
+            @test Legolas.complies_with(Tables.Schema((:id, :sym), (T, S)), AcceptedV1SchemaVersion())
         end
     end
 
     @testset "Legolas.declaration" begin
         @test_throws Legolas.UnknownSchemaVersionError(undeclared) Legolas.declaration(undeclared)
-        @test Legolas.declaration(ParentSchemaV1()) == ("test.parent@1" => [RequiredFieldInfo(:x, :Vector, false, :(x::Vector = x)),
-                                                                            RequiredFieldInfo(:y, :AbstractString, false, :(y::AbstractString = y))])
-        @test Legolas.declaration(ChildSchemaV1()) == ("test.child@1>test.parent@1" => [RequiredFieldInfo(:z, :Any, false, :(z::Any = z))])
-        @test Legolas.declaration(GrandchildSchemaV1()) == ("test.grandchild@1>test.child@1" => [RequiredFieldInfo(:a, :Int32, false, :(a::Int32 = round(Int32, a))),
-                                                                                                 RequiredFieldInfo(:y, :String, false, :(y::String = string(y[1:2])))])
+        @test Legolas.declaration(ParentV1SchemaVersion()) == ("test.parent@1" => [RequiredFieldInfo(:x, :Vector, false, :(x::Vector = x)),
+                                                                                   RequiredFieldInfo(:y, :AbstractString, false, :(y::AbstractString = y))])
+        @test Legolas.declaration(ChildV1SchemaVersion()) == ("test.child@1>test.parent@1" => [RequiredFieldInfo(:z, :Any, false, :(z::Any = z))])
+        @test Legolas.declaration(GrandchildV1SchemaVersion()) == ("test.grandchild@1>test.child@1" => [RequiredFieldInfo(:a, :Int32, false, :(a::Int32 = round(Int32, a))),
+                                                                                                        RequiredFieldInfo(:y, :String, false, :(y::String = string(y[1:2])))])
     end
 
     r0 = (x=[42], y="foo", z=:three, a=1.3)
@@ -340,12 +337,12 @@ end
     tbl = Arrow.Table(Arrow.tobuffer((; x=[GrandchildV1(r0)])))
     @test tbl.x[1] == GrandchildV1(r0_roundtripped)
 
-    svs = [GrandchildSchemaV1(), ChildSchemaV1(), ParentSchemaV1()]
+    svs = [GrandchildV1SchemaVersion(), ChildV1SchemaVersion(), ParentV1SchemaVersion()]
     tbl = Arrow.Table(Arrow.tobuffer((; sv=svs)))
     @test all(tbl.sv .== svs)
 
     tbl = [NestedV1(; gc=GrandchildV1(r0), k="test")]
-    roundtripped = Legolas.read(Legolas.tobuffer(tbl, NestedSchemaV1()))
+    roundtripped = Legolas.read(Legolas.tobuffer(tbl, NestedV1SchemaVersion()))
     @test roundtripped.gc[1] == GrandchildV1(r0_roundtripped)
     @test roundtripped.k[1] == "test"
 end
@@ -359,9 +356,9 @@ end
     root = mktempdir()
     path = MyPath(joinpath(root, "baz.arrow"))
     t = [(x=[1,2], y="hello"), (x=[3,4], y="bye")]
-    Legolas.write(path, t, ParentSchemaV1())
+    Legolas.write(path, t, ParentV1SchemaVersion())
     @test t == [NamedTuple(ParentV1(r)) for r in Tables.rows(Legolas.read(path))]
-    tbl = Arrow.Table(Legolas.tobuffer(t, ParentSchemaV1(); metadata=("a" => "b", "c" => "d")))
+    tbl = Arrow.Table(Legolas.tobuffer(t, ParentV1SchemaVersion(); metadata=("a" => "b", "c" => "d")))
     @test Set(Arrow.getmetadata(tbl)) == Set((Legolas.LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY => "test.parent@1",
                                               "a" => "b", "c" => "d"))
 
@@ -370,7 +367,7 @@ end
     end
     Legolas.Arrow.getmetadata(moo::Moo) = moo.meta
     moo = Moo(Dict("a" => "b", "b" => "b", Legolas.LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY => "test.parent@1"))
-    @test ParentSchemaV1() == Legolas.extract_schema_version(moo)
+    @test ParentV1SchemaVersion() == Legolas.extract_schema_version(moo)
 
     t = Arrow.tobuffer((a=[1, 2], b=[3, 4]); metadata=Dict(Legolas.LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY => "haha@3"))
     @test_throws Legolas.UnknownSchemaVersionError Legolas.read(t)

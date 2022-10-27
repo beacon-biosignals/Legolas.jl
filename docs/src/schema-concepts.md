@@ -19,7 +19,7 @@ Schema authors should follow the below conventions when choosing the name of a n
 
 1. Include a namespace. For example, assuming the schema is defined in a package Foo.jl, `foo.automobile` is good, `automobile` is bad.
 2. Prefer singular over plural. For example, `foo.automobile` is good, `foo.automobiles` is bad.
-3. Don't "overqualify" the schema name with ancestor-derived information. For example, `bar.automobile@1>foo.automobile@1` is good, `baz.supercar@1>bar.automobile@1` is good, `bar.foo.automobile@1>foo.automobile@1` is bad, `baz.automobile.supercar@1>bar.automobile@1` is bad.
+3. Don't "overqualify" a schema name with ancestor-derived information that is better captured by the fully qualified identifier of a specific schema version. For example, `bar.automobile` should be preferred over `bar.foo.automobile`, since `bar.automobile@1>foo.automobile@1` is preferrable to `bar.foo.automobile@1>foo.automobile@1`. Similarly, `baz.supercar` should be preferred over `baz.automobile.supercar`, since `baz.supercar@1>bar.automobile@1` is preferrable to `baz.automobile.supercar@1>bar.automobile@1`.
 
 ## Schema Versioning: You Break It, You Bump It
 
@@ -33,7 +33,7 @@ For example, a schema author must introduce a new schema version for any of the 
 - An existing required field's type restriction is tightened.
 - An existing required field is renamed.
 
-One benefit of Legolas' approach is that multiple schema versions may be defined in the same codebase, e.g. there's nothing that prevents `@version("my-schema@1", ...)` and `@version("my-schema@2", ...)` from being defined and utilized simultaneously. The source code that defines any given Legolas schema version and/or consumes/produces Legolas tables is presumably already semantically versioned, such that consumer/producer packages can determine their compatibility with each other in the usual manner via interpreting major/minor/patch increments.
+One benefit of Legolas' approach is that multiple schema versions may be defined in the same codebase, e.g. there's nothing that prevents `@version(FooV1, ...)` and `@version(FooV2, ...)` from being defined and utilized simultaneously. The source code that defines any given Legolas schema version and/or consumes/produces Legolas tables is presumably already semantically versioned, such that consumer/producer packages can determine their compatibility with each other in the usual manner via interpreting major/minor/patch increments.
 
 Note that it is preferable to avoid introducing new versions of an existing schema, if possible, in order to minimize code/data churn for downstream producers/consumers. Thus, authors should prefer conservative field type restrictions from the get-go. Remember: loosening a field type restriction is not a breaking change, but tightening one is.
 

@@ -18,7 +18,7 @@ using Legolas: @schema, @version, complies_with, find_violation, validate
 # let's start the tour by declaring a new Legolas schema via the `@schema` macro.
 
 # Here, we declare a new schema named `example.foo`, specifying that Legolas should
-# use the prefix `Foo` whenever it generates `example.foo`-related type definitions:
+# use the prefix `Foo` for all `example.foo`-related type definitions:
 @schema "example.foo" Foo
 
 # The above schema declaration provides the necessary scaffolding to start declaring
@@ -26,17 +26,33 @@ using Legolas: @schema, @version, complies_with, find_violation, validate
 # set of required fields that a given table (or row) must contain in order to comply
 # with that schema version. Let's use the `@version` macro to declare an initial
 # version of the `example.foo` schema with some required fields:
-@version "example.foo@1" begin
+@version FooV1 begin
     a::Real
     b::String
     c
     d::AbstractVector
 end
 
-# Behind the scenes, this `@version` declaration automatically generated some type definitions
-# and overloaded a bunch of useful Legolas methods with respect to `example.foo@1`. One of the
-# types it generated is `FooSchemaV1`, an alias for `Legolas.SchemaVersion`:
-@test FooSchemaV1() == Legolas.SchemaVersion("example.foo", 1)
+# In the above declaration, the symbol `FooV1` can be broken into the prefix `Foo` (as
+# specified in `example.foo`'s `@schema` declaration) and `1`, the integer that identifies
+# this particular version of the `example.foo` schema. The `@version` macro requires this
+# symbol to always follow this format (`$(prefix)V$(integer)`), because it generates two
+# special types that match it. For example, our `@version` declaration above generated:
+#
+# - `FooV1`: A special subtype of `Tables.AbstractRow` whose fields match the corresponding
+#   schema version's declared required fields.
+# - `FooV1SchemaVersion`: An alias for `Legolas.SchemaVersion` that matches the corresponding
+#   schema version.
+
+# Let's first examine `FooV1SchemaVersion`:
+@test Legolas.SchemaVersion("example.foo", 1) == FooV1SchemaVersion()
+@test Legolas.SchemaVersion("example.foo", 1) isa FooV1SchemaVersion
+@test "example.foo@1" == Legolas.identifier(FooV1SchemaVersion())
+
+# As you can see, Legolas' Julia-agnostic identifier for this schema version is `example.foo@1`.
+# To avoid confusion throughout this tour, we'll use this Julia-agnostic identifier to refer to
+# individual schema versions in the abstract sense, while we'll use the relevant `SchemaVersion`
+# aliases to specifically refer to the types that represent schema versions in Julia.
 
 #####
 ##### `Tables.Schema` Compliance/Validation
@@ -53,28 +69,28 @@ for s in [Tables.Schema((:a, :b, :c, :d), (Real, String, Any, AbstractVector)), 
           Tables.Schema((:a, :b, :d), (Int, String, Vector)),                   # Fields whose declared type constraints are `>:Missing` may be elided entirely.
           Tables.Schema((:a, :x, :b, :y, :d), (Int, Any, String, Any, Vector))] # Non-required fields may also be present.
     # if `complies_with` finds a violation, it returns `false`; returns `true` otherwise
-    @test complies_with(s, FooSchemaV1())
+    @test complies_with(s, FooV1SchemaVersion())
 
     # if `validate` finds a violation, it throws an error indicating the violation;
     # returns `nothing` otherwise
-    @test validate(s, FooSchemaV1()) isa Nothing
+    @test validate(s, FooV1SchemaVersion()) isa Nothing
 
     # if `find_violation` finds a violation, it returns a tuple indicating the relevant
     # field and its violation; returns `nothing` otherwise
-    @test isnothing(find_violation(s, FooSchemaV1()))
+    @test isnothing(find_violation(s, FooV1SchemaVersion()))
 end
 
 # ...while the below `Tables.Schema`s do not:
 
 s = Tables.Schema((:a, :c, :d), (Int, Float64, Vector)) # The required non-`>:Missing` field `b::String` is not present.
-@test !complies_with(s, FooSchemaV1())
-@test_throws ArgumentError validate(s, FooSchemaV1())
-@test isequal(find_violation(s, FooSchemaV1()), :b => missing)
+@test !complies_with(s, FooV1SchemaVersion())
+@test_throws ArgumentError validate(s, FooV1SchemaVersion())
+@test isequal(find_violation(s, FooV1SchemaVersion()), :b => missing)
 
 s = Tables.Schema((:a, :b, :c, :d), (Int, String, Float64, Any)) # The type of required field `d::AbstractVector` is not `<:AbstractVector`.
-@test !complies_with(s, FooSchemaV1())
-@test_throws ArgumentError validate(s, FooSchemaV1())
-@test isequal(find_violation(s, FooSchemaV1()), :d => Any)
+@test !complies_with(s, FooV1SchemaVersion())
+@test_throws ArgumentError validate(s, FooV1SchemaVersion())
+@test isequal(find_violation(s, FooV1SchemaVersion()), :d => Any)
 
 # The expectations that characterize Legolas' particular notion of "schematic compliance" - requiring the
 # presence of pre-specified declared fields, assuming non-present fields to be implicitly `missing`, and allowing
@@ -87,12 +103,14 @@ s = Tables.Schema((:a, :b, :c, :d), (Int, String, Float64, Any)) # The type of r
 #####
 ##### Legolas-Generated Record Types
 #####
-# In addition to `FooSchemaV1`, `example.foo@1`'s `@version` declaration also generated a new type,
-# `FooV1 <: Tables.AbstractRow`, whose fields are guaranteed to match all the fields required by
-# `example.foo@1`. We refer to such Legolas-generated types as "Legolas record types" (see
-# https://en.wikipedia.org/wiki/Record_(computer_science)).
 
-# Legolas record type constructors accept keyword arguments or `Tables.AbstractRow`-compliant values:
+# As mentioned in this tour's introduction, `FooV1` is a subtype of `Tables.AbstractRow` whose fields are guaranteed to
+# match all the fields required by `example.foo@1`. We refer to such Legolas-generated types as "record types" (see
+# https://en.wikipedia.org/wiki/Record_(computer_science)). These record types are direct subtypes of
+# `Legolas.AbstractRecord`, which is, itself, a subtype of `Tables.AbstractRow`:
+@test FooV1 <: Legolas.AbstractRecord <: Tables.AbstractRow
+
+# Record type constructors accept keyword arguments or `Tables.AbstractRow`-compliant values:
 fields = (a=1.0, b="hi", c=π, d=[1, 2, 3])
 @test NamedTuple(FooV1(; fields...)) == fields
 @test NamedTuple(FooV1(fields)) == fields
@@ -129,7 +147,7 @@ foo = FooV1(; a=1.0, b="hi", d=[1, 2, 3])
 # any such assignments, so let's declare a new schema version `example.bar@1` that does:
 @schema "example.bar" Bar
 
-@version "example.bar@1" begin
+@version BarV1 begin
     x::Union{Int8,Missing} = ismissing(x) ? x : Int8(clamp(x, -128, 127))
     y::String = string(y)
     z::String = ismissing(z) ? string(y, '_', x) : z
@@ -177,7 +195,7 @@ const GLOBAL_STATE = Ref(0)
 
 @schema "example.bad" Bad
 
-@version "example.bad@1" begin
+@version BadV1 begin
     x::Int = x + 1
     y = (GLOBAL_STATE[] += y; GLOBAL_STATE[])
 end
@@ -198,7 +216,7 @@ fields = (x=1, y=1)
 # as an "extension" of `example.bar@1`:
 @schema "example.baz" Baz
 
-@version "example.baz@1 > example.bar@1" begin
+@version BazV1 > BarV1 begin
     x::Int8
     z::String
     k::Int64 = ismissing(k) ? length(z) : k
@@ -211,14 +229,14 @@ end
 # For a given Legolas schema version extension to be valid, all `Tables.Schema`s that comply with the child
 # must comply with the parent, but the reverse need not be true. We can check a schema version's required fields
 # and their type constraints via `Legolas.required_fields`. Based on these outputs, it is a worthwhile exercise
-# to confirm for yourself that `BazSchemaV1` is a valid extension of `BarSchemaV1` under the aforementioned rule:
-@test Legolas.required_fields(BarSchemaV1()) == (x=Union{Missing,Int8}, y=String, z=String)
-@test Legolas.required_fields(BazSchemaV1()) == (x=Int8, y=String, z=String, k=Int64)
+# to confirm for yourself that `BazV1SchemaVersion` is a valid extension of `BarV1SchemaVersion` under the aforementioned rule:
+@test Legolas.required_fields(BarV1SchemaVersion()) == (x=Union{Missing,Int8}, y=String, z=String)
+@test Legolas.required_fields(BazV1SchemaVersion()) == (x=Int8, y=String, z=String, k=Int64)
 
 # As a counterexample, the following is invalid, because the declaration of `x::Any` would allow for `x`
 # values that are disallowed by the parent schema version `example.bar@1`:
 @schema "example.broken" Broken
-@test_throws Legolas.SchemaVersionDeclarationError @version "example.broken@1 > example.bar@1" begin x::Any end
+@test_throws Legolas.SchemaVersionDeclarationError @version BrokenV1 > BarV1 begin x::Any end
 
 # Record type constructors generated for extension schema versions will apply the parent's field
 # assignments before applying the child's field assignments. Notice how `BazV1` applies the
@@ -248,18 +266,18 @@ end
 ##### Schema Versioning
 #####
 
-# Throughout this tour, all `@version` declarations have used the version number `1`, and thus every generated
-# record type and `SchemaVersion` alias has had the suffix `V1`. As you might guess, you can declare more than
-# a single version of any given schema, and the generated types' suffix will always match the version integer:
+# Throughout this tour, all `@version` declarations have used the version number `1`. As you might guess, you can
+# declare more than a single version of any given schema. Here's an example using the `example.foo` schema we defined
+# earlier:
 
-@version "example.foo@2" begin
+@version FooV2 begin
     a::Float64
     b::String
     c::Int
     d::Vector
 end
 
-@test FooSchemaV2() == Legolas.SchemaVersion("example.foo", 2)
+@test FooV2SchemaVersion() == Legolas.SchemaVersion("example.foo", 2)
 
 fields = (a=1.0, b="b", c=3, d=[1,2,3])
 @test NamedTuple(FooV2(fields)) == fields
@@ -279,7 +297,7 @@ fields = (a=1.0, b="b", c=3, d=[1,2,3])
 
 @schema "example.param" Param
 
-@version "example.param@1" begin
+@version ParamV1 begin
     a::Int
     b::(<:Real)
     c
@@ -297,7 +315,7 @@ end
 
 @schema "example.child-param" ChildParam
 
-@version "example.child-param@1 > example.param@1" begin
+@version ChildParamV1 > ParamV1 begin
     c::(<:Union{Real,String})
     d::(<:Union{Real,Missing})
     e
@@ -330,16 +348,16 @@ table_isequal(a, b) = isequal(Legolas.materialize(a), Legolas.materialize(b))
 #   key whose value is `Legolas.schema_identifier(schema)`. This field enables consumers of the table to
 #   perform automated (or manual) schema discovery/evolution/validation.
 io = IOBuffer()
-Legolas.write(io, table, BazSchemaV1())
+Legolas.write(io, table, BazV1SchemaVersion())
 t = Arrow.Table(seekstart(io))
 @test Arrow.getmetadata(t) == Dict("legolas_schema_qualified" => "example.baz@1>example.bar@1")
 @test table_isequal(t, Arrow.Table(Arrow.tobuffer(table)))
-@test table_isequal(t, Arrow.Table(Legolas.tobuffer(table, BazSchemaV1()))) # `Legolas.tobuffer` is analogous to `Arrow.tobuffer`
+@test table_isequal(t, Arrow.Table(Legolas.tobuffer(table, BazV1SchemaVersion()))) # `Legolas.tobuffer` is analogous to `Arrow.tobuffer`
 
 # Similarly, Legolas provides `Legolas.read(src)`, which wraps `Arrow.Table(src)`, but
 # validates the deserialized `Arrow.Table` against its declared schema version before
 # returning it:
-@test table_isequal(Legolas.read(Legolas.tobuffer(table, BazSchemaV1())), t)
+@test table_isequal(Legolas.read(Legolas.tobuffer(table, BazV1SchemaVersion())), t)
 msg = """
       could not extract valid `Legolas.SchemaVersion` from the `Arrow.Table` read
       via `Legolas.read`; is it missing the expected custom metadata and/or the
@@ -347,7 +365,7 @@ msg = """
       """
 @test_throws ArgumentError(msg) Legolas.read(Arrow.tobuffer(table))
 invalid = [Tables.rowmerge(row; k=string(row.k)) for row in table]
-invalid_but_has_metadata = Arrow.tobuffer(invalid; metadata=("legolas_schema_qualified" => Legolas.identifier(BazSchemaV1()),))
+invalid_but_has_metadata = Arrow.tobuffer(invalid; metadata=("legolas_schema_qualified" => Legolas.identifier(BazV1SchemaVersion()),))
 @test_throws ArgumentError("field `k` has unexpected type; expected <:Int64, found String") Legolas.read(invalid_but_has_metadata)
 
 # A note about one additional benefit of `Legolas.read`/`Legolas.write`: Unlike their Arrow.jl counterparts,
@@ -364,7 +382,7 @@ invalid_but_has_metadata = Arrow.tobuffer(invalid; metadata=("legolas_schema_qua
 
 @schema "example.portable" Portable
 
-@version "example.portable@1" begin
+@version PortableV1 begin
     id::UUID = UUID(id)
 end
 
@@ -380,8 +398,8 @@ end
 # since its UUID conversion behavior (and the corresponding type constraint) may be useful for validated construction.
 
 # Luckily, it turns out that Legolas is actually smart enough to natively support this by default:
-@test complies_with(Tables.Schema((:id,), (UUID,)), PortableSchemaV1())
-@test complies_with(Tables.Schema((:id,), (UInt128,)), PortableSchemaV1())
+@test complies_with(Tables.Schema((:id,), (UUID,)), PortableV1SchemaVersion())
+@test complies_with(Tables.Schema((:id,), (UInt128,)), PortableV1SchemaVersion())
 
 # How is this possible? Well, when Legolas checks whether a given field `f::T` matches a required field `f::F`, it doesn't
 # directly check that `T <: F`; instead, it checks that `T <: Legolas.accepted_field_type(sv, F)` where `sv` is the relevant

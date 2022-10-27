@@ -12,6 +12,6 @@ Technically, Legolas.jl's core `@schema`/`@version` functionality is agnostic to
 
 Otherwise, with regards to (de)serialization-specific functionality, Beacon has put effort into ensuring Legolas.jl works well with [Arrow.jl](https://github.com/JuliaData/Arrow.jl) "by default" simply because we're heavy users of the Arrow format. There's nothing stopping users from composing the package with [JSON3.jl](https://github.com/quinnj/JSON3.jl) or other packages.
 
-## Why are Legolas.jl's generated record types defined the way that they are? For example, why is the version number hardcoded
+## Why are Legolas.jl's generated record types defined the way that they are? For example, why is the version number hardcoded in the type name?
 
 Many of Legolas' current choices on this front stem from refactoring efforts undertaken as part of [this pull request](https://github.com/beacon-biosignals/Legolas.jl/pull/54), and directly resulted from a [design mini-investigation](https://gist.github.com/jrevels/fdfe939109bee23566d425440b7c759e) associated with those efforts.
