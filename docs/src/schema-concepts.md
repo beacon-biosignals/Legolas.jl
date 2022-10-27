@@ -19,7 +19,7 @@ Schema authors should follow the below conventions when choosing the name of a n
 
 1. Include a namespace. For example, assuming the schema is defined in a package Foo.jl, `foo.automobile` is good, `automobile` is bad.
 2. Prefer singular over plural. For example, `foo.automobile` is good, `foo.automobiles` is bad.
-3. Don't "overqualify" a schema name with ancestor-derived information that is better captured by the fully qualified identifier of a specific schema version. For example, `bar.automobile` should be preferred over `bar.foo.automobile`, since `bar.automobile@1>foo.automobile@1` is preferrable to `bar.foo.automobile@1>foo.automobile@1`. Similarly, `baz.supercar` should be preferred over `baz.automobile.supercar`, since `baz.supercar@1>bar.automobile@1` is preferrable to `baz.automobile.supercar@1>bar.automobile@1`.
+3. Don't "overqualify" a schema name with ancestor-derived information that is better captured by the fully qualified identifier of a specific schema version. For example, `bar.automobile` should be preferred over `bar.foo.automobile`, since `bar.automobile@1>foo.automobile@1` is preferable to `bar.foo.automobile@1>foo.automobile@1`. Similarly, `baz.supercar` should be preferred over `baz.automobile.supercar`, since `baz.supercar@1>bar.automobile@1` is preferable to `baz.automobile.supercar@1>bar.automobile@1`.
 
 ## Schema Versioning: You Break It, You Bump It
 
