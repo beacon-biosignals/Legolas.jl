@@ -323,7 +323,6 @@ macro schema(schema_name, schema_prefix)
             throw(ArgumentError(string("A schema with this name was already declared by a different module: ", m)))
         else
             Legolas._schema_declared_in_module(::Val{Symbol($schema_name)}) = @__MODULE__
-            $(esc(:__legolas_schema_name_from_prefix__))(::Val) = nothing
             $(esc(:__legolas_schema_name_from_prefix__))(::Val{$(Base.Meta.quot(schema_prefix))}) = $(Base.Meta.quot(Symbol(schema_name)))
         end
     end
