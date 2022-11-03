@@ -300,7 +300,7 @@ abstract type AbstractRecord <: Tables.AbstractRow end
 ##### `@schema`
 #####
 
-schema_name_from_prefix(::Val) = nothing
+_schema_declared_in_module(::Val) = nothing
 
 """
     @schema "name" Prefix
@@ -316,7 +316,16 @@ macro schema(schema_name, schema_prefix)
     is_valid_schema_name(schema_name) || return :(throw(ArgumentError("`name` provided to `@schema` is not a valid `Legolas.SchemaVersion` name: \"" * $schema_name * "\"")))
     schema_prefix isa Symbol || return :(throw(ArgumentError(string("`Prefix` provided to `@schema` is not a valid type name: ", $(Base.Meta.quot(schema_prefix))))))
     return quote
-        Legolas.schema_name_from_prefix(::Val{$(Base.Meta.quot(schema_prefix))}) = $schema_name
+        # This approach provides some safety against accidentally replacing another module's schema's name,
+        # without making it annoying to reload code/modules in an interactice development context.
+        m = Legolas._schema_declared_in_module(Val(Symbol($schema_name)))
+        if m isa Module && string(m) != string(@__MODULE__)
+            throw(ArgumentError(string("A schema with this name was already declared by a different module: ", m)))
+        else
+            Legolas._schema_declared_in_module(::Val{Symbol($schema_name)}) = @__MODULE__
+            $(esc(:__legolas_schema_name_from_prefix__))(::Val) = nothing
+            $(esc(:__legolas_schema_name_from_prefix__))(::Val{$(Base.Meta.quot(schema_prefix))}) = $(Base.Meta.quot(Symbol(schema_name)))
+        end
     end
 end
 
@@ -344,6 +353,9 @@ function Base.showerror(io::IO, e::SchemaVersionDeclarationError)
 
               - `@version` declarations must list at least one required field,
               and must not list duplicate fields within the same declaration.
+
+              - New versions of a given schema may only be declared within the same
+              module that declared the schema.
               """)
 end
 
@@ -379,14 +391,6 @@ function _has_valid_child_field_types(child_fields::NamedTuple, parent_fields::N
     return true
 end
 
-_validate_wrt_parent(::NamedTuple, ::Nothing) = nothing
-
-function _validate_wrt_parent(child_fields::NamedTuple, parent::SchemaVersion)
-    declared(parent) || throw(SchemaVersionDeclarationError("parent schema version cannot be used before it has been declared: $parent"))
-    _has_valid_child_field_types(child_fields, required_fields(parent)) || throw(SchemaVersionDeclarationError("declared field types violate parent's field types"))
-    return nothing
-end
-
 function _check_for_expected_field(schema::Tables.Schema, name::Symbol, ::Type{T}) where {T}
     i = findfirst(==(name), schema.names)
     if isnothing(i)
@@ -395,6 +399,23 @@ function _check_for_expected_field(schema::Tables.Schema, name::Symbol, ::Type{T
         schema.types[i] <: T || return schema.types[i]
     end
     return nothing
+end
+
+function _generate_schema_version_definitions(schema_version::SchemaVersion, parent, declared_field_names_types, schema_version_declaration)
+    identifier_string = string(name(schema_version), '@', version(schema_version))
+    required_field_names_types = declared_field_names_types
+    if !isnothing(parent)
+        identifier_string = string(identifier_string, '>',  Legolas.identifier(parent))
+        required_field_names_types = merge(Legolas.required_fields(parent), required_field_names_types)
+    end
+    quoted_schema_version_type = Base.Meta.quot(typeof(schema_version))
+    return quote
+        @inline Legolas.declared(::$quoted_schema_version_type) = true
+        @inline Legolas.identifier(::$quoted_schema_version_type) = $identifier_string
+        @inline Legolas.parent(::$quoted_schema_version_type) = $(Base.Meta.quot(parent))
+        Legolas.required_fields(::$quoted_schema_version_type) = $required_field_names_types
+        Legolas.declaration(::$quoted_schema_version_type) = $(Base.Meta.quot(schema_version_declaration))
+    end
 end
 
 function _generate_validation_definitions(schema_version::SchemaVersion)
@@ -415,7 +436,8 @@ function _generate_validation_definitions(schema_version::SchemaVersion)
     end
 end
 
-function _record_type end # overloaded by `@version`
+_record_type_from_schema_version(::Nothing) = nothing
+_schema_version_from_record_type(::Nothing) = nothing
 
 # Note also that this function's implementation is allowed to "observe" `Legolas.required_fields(parent)`
 # (if a parent exists), but is NOT allowed to "observe" `Legolas.declaration(parent)`, since the latter
@@ -458,7 +480,7 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
     parent = Legolas.parent(schema_version)
     if !isnothing(parent)
         p = gensym()
-        P = Base.Meta.quot(_record_type(parent))
+        P = Base.Meta.quot(_record_type_from_schema_version(parent))
         parent_record_field_names = keys(required_fields(parent))
         parent_record_application = quote
             $p = $P(; $(parent_record_field_names...))
@@ -528,6 +550,8 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
         $outer_constructor_definitions
         $base_overload_definitions
         $arrow_overload_definitions
+        Legolas._record_type_from_schema_version(::$(Base.Meta.quot(typeof(schema_version)))) = $R
+        Legolas._schema_version_from_record_type(::Type{<:$R}) = $schema_version
     end
 end
 
@@ -537,15 +561,10 @@ function _parse_record_type_symbol(t::Symbol)
         p, v = pv
         p = Symbol(p)
         v = tryparse(Int, v)
-        if v isa Int
-            n = schema_name_from_prefix(Val(p))
-            n isa String || return SchemaVersionDeclarationError("provided record type symbol references undeclared schema: ", t)
-            return n, p, v
-        end
+        v isa Int && return (p, v)
     end
     return SchemaVersionDeclarationError("provided record type symbol is malformed: ", t)
 end
-
 
 """
     @version RecordType begin
@@ -564,7 +583,7 @@ Given a prior `@schema` declaration of the form:
 
     @schema "example.name" Name
 
-...the `n`th version of `example.name` can be declared via a `@version` declaration of the form:
+...the `n`th version of `example.name` can be declared in the same module via a `@version` declaration of the form:
 
     @version NameV\$(n) begin
         required_field_expression_1
@@ -578,7 +597,7 @@ necessary definitions to overload relevant Legolas methods with specialized beha
 the declared required fields.
 
 If the declared schema version has a parent, it should be specified via the optional `> ParentRecordType`
-clause.
+clause. `ParentRecordType` should refer directly to an existing Legolas-generated record type.
 
 Each `required_field_expression` specifies a required field of the declared schema version, and is an
 expression of the form `field::F = rhs` where:
@@ -629,33 +648,20 @@ For more details and examples, please see `Legolas.jl/examples/tour.jl` and the
 "Schema-Related Concepts/Conventions" section of the Legolas.jl documentation.
 """
 macro version(record_type, required_field_statements)
+    # parse `record_type`
     if record_type isa Symbol
         parent_record_type = nothing
     elseif record_type isa Expr && record_type.head == :call && length(record_type.args) == 3 &&
-           record_type.args[1] == :> &&
-           record_type.args[2] isa Symbol &&
-           record_type.args[3] isa Symbol
+           record_type.args[1] == :> && record_type.args[2] isa Symbol
         parent_record_type = record_type.args[3]
         record_type = record_type.args[2]
     else
         return :(throw(SchemaVersionDeclarationError("provided record type expression is malformed: ", $(Base.Meta.quot(record_type)))))
     end
-
     x = _parse_record_type_symbol(record_type)
     x isa SchemaVersionDeclarationError && return :(throw($x))
-    schema_name, _, schema_integer = x
-    schema_version = SchemaVersion(schema_name, schema_integer)
-    quoted_schema_version = Base.Meta.quot(schema_version)
-    quoted_schema_version_type = Base.Meta.quot(typeof(schema_version))
-    parent = nothing
-    if !isnothing(parent_record_type)
-        x = _parse_record_type_symbol(parent_record_type)
-        x isa SchemaVersionDeclarationError && return :(throw($x))
-        parent_name, _, parent_integer = x
-        parent_name == schema_name && return :(throw(SchemaVersionDeclarationError("cannot extend from a different version of the same schema")))
-        parent = SchemaVersion(parent_name, parent_integer)
-    end
-    quoted_parent = Base.Meta.quot(parent)
+    schema_prefix, schema_version_integer = x
+    quoted_schema_prefix = Base.Meta.quot(schema_prefix)
 
     # parse `required_field_statements`
     if !(required_field_statements isa Expr && required_field_statements.head == :block && !isempty(required_field_statements.args))
@@ -675,41 +681,35 @@ macro version(record_type, required_field_statements)
         msg = string("cannot have duplicate field names in `@version` declaration; recieved: ", [f.name for f in required_field_infos])
         return :(throw(SchemaVersionDeclarationError($msg)))
     end
-    field_names_types = Expr(:tuple, (:($(f.name) = $(esc(f.type))) for f in required_field_infos)...)
-
-    # basic accessor function definitions
-    full_identifier_string = string(schema_name, '@', schema_integer)
-    child_identifier_string = full_identifier_string
-    required_field_names_types = field_names_types
-    if !isnothing(parent)
-        full_identifier_string = :(string($full_identifier_string, '>', Legolas.identifier($quoted_parent)))
-        child_identifier_string = string(child_identifier_string, '>', name(parent), '@', version(parent))
-        required_field_names_types = :(merge(Legolas.required_fields($quoted_parent), $required_field_names_types))
-    end
-    schema_version_declaration = :($child_identifier_string => copy($(Base.Meta.quot(required_field_infos))))
-    check_against_declaration = :($child_identifier_string => $(Base.Meta.quot(required_field_infos)))
+    declared_field_names_types = Expr(:tuple, (:($(f.name) = $(esc(f.type))) for f in required_field_infos)...)
 
     return quote
-        if Legolas.declared($quoted_schema_version) && Legolas.declaration($quoted_schema_version) != $check_against_declaration
-            throw(SchemaVersionDeclarationError("invalid redeclaration of existing schema version; all `@version` redeclarations must exactly match previous declarations"))
+        if !isdefined((@__MODULE__), :__legolas_schema_name_from_prefix__)
+            throw(SchemaVersionDeclarationError("no prior `@schema` declaration found in current module"))
+        elseif isnothing((@__MODULE__).__legolas_schema_name_from_prefix__(Val($quoted_schema_prefix)))
+            throw(SchemaVersionDeclarationError(string("missing prior `@schema` declaration for `", $quoted_schema_prefix, "` in current module")))
         else
-            Legolas._validate_wrt_parent($field_names_types, $quoted_parent)
+            schema_name = (@__MODULE__).__legolas_schema_name_from_prefix__(Val($quoted_schema_prefix))
+            schema_version = Legolas.SchemaVersion{schema_name,$schema_version_integer}()
+            parent = Legolas._schema_version_from_record_type($(esc(parent_record_type)))
 
-            @inline Legolas.declared(::$quoted_schema_version_type) = true
+            declared_identifier = string(schema_name, '@', $schema_version_integer)
+            if !isnothing(parent)
+                declared_identifier = string(declared_identifier, '>', Legolas.name(parent), '@', Legolas.version(parent))
+            end
+            schema_version_declaration = declared_identifier => $(Base.Meta.quot(required_field_infos))
 
-            @inline Legolas.identifier(::$quoted_schema_version_type) = $full_identifier_string
-
-            @inline Legolas.parent(::$quoted_schema_version_type) = $quoted_parent
-
-            Legolas.required_fields(::$quoted_schema_version_type) = $required_field_names_types
-
-            Legolas.declaration(::$quoted_schema_version_type) = $schema_version_declaration
-
-            $(esc(:eval))(Legolas._generate_validation_definitions($quoted_schema_version))
-
-            $(esc(:eval))(Legolas._generate_record_type_definitions($quoted_schema_version, $(Base.Meta.quot(record_type))))
-
-            Legolas._record_type(::$quoted_schema_version_type) = $(esc(record_type))
+            if Legolas.declared(schema_version) && Legolas.declaration(schema_version) != schema_version_declaration
+                throw(SchemaVersionDeclarationError("invalid redeclaration of existing schema version; all `@version` redeclarations must exactly match previous declarations"))
+            elseif parent isa Legolas.SchemaVersion && Legolas.name(parent) == schema_name
+                throw(SchemaVersionDeclarationError("cannot extend from another version of the same schema"))
+            elseif parent isa Legolas.SchemaVersion && !(Legolas._has_valid_child_field_types($declared_field_names_types, Legolas.required_fields(parent)))
+                throw(SchemaVersionDeclarationError("declared field types violate parent's field types"))
+            else
+                $(esc(:eval))(Legolas._generate_schema_version_definitions(schema_version, parent, $declared_field_names_types, schema_version_declaration))
+                $(esc(:eval))(Legolas._generate_validation_definitions(schema_version))
+                $(esc(:eval))(Legolas._generate_record_type_definitions(schema_version, $(Base.Meta.quot(record_type))))
+            end
         end
         nothing
     end

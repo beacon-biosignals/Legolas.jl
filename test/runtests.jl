@@ -1,6 +1,8 @@
 using Legolas, Test, DataFrames, Arrow, UUIDs
 using Legolas: SchemaVersion, @schema, @version, SchemaVersionDeclarationError, RequiredFieldInfo
 
+@test_throws SchemaVersionDeclarationError("no prior `@schema` declaration found in current module") @version(TestV1, begin x end)
+
 include(joinpath(dirname(@__DIR__), "examples", "tour.jl"))
 
 @testset "Legolas.lift" begin
@@ -221,27 +223,26 @@ end
 @testset "`Legolas.@version` and associated utilities for declared `Legolas.SchemaVersion`s" begin
     @testset "Legolas.SchemaVersionDeclarationError" begin
         @test_throws SchemaVersionDeclarationError("malformed or missing declaration of required fields") @version(ChildV2, begin end)
-        @test_throws SchemaVersionDeclarationError("provided record type symbol references undeclared schema: UnknownV1") @version(UnknownV1 > ChildV1, begin x end)
-        @test_throws SchemaVersionDeclarationError("provided record type symbol references undeclared schema: UnknownV1") @version(ChildV1 > UnknownV1, begin x end)
+        @test_throws SchemaVersionDeclarationError("missing prior `@schema` declaration for `Unknown` in current module") @version(UnknownV1 > ChildV1, begin x end)
         @test_throws SchemaVersionDeclarationError("provided record type symbol is malformed: Child") @version(Child, begin x end)
         @test_throws SchemaVersionDeclarationError("provided record type symbol is malformed: Childv2") @version(Childv2, begin x end)
         @test_throws SchemaVersionDeclarationError("provided record type symbol is malformed: ChildV") @version(ChildV, begin x end)
         @test_throws SchemaVersionDeclarationError("provided record type symbol is malformed: ChildVTwo") @version(ChildVTwo, begin x end)
-        @test_throws SchemaVersionDeclarationError("provided record type symbol is malformed: Parent") @version(ChildV1 > Parent, begin x end)
-        @test_throws SchemaVersionDeclarationError("provided record type symbol is malformed: Parentv2") @version(ChildV1 > Parentv2, begin x end)
-        @test_throws SchemaVersionDeclarationError("provided record type symbol is malformed: ParentV") @version(ChildV1 > ParentV, begin x end)
-        @test_throws SchemaVersionDeclarationError("provided record type symbol is malformed: ParentVTwo") @version(ChildV1 > ParentVTwo, begin x end)
+        @test_throws SchemaVersionDeclarationError("provided record type symbol is malformed: Child") @version(Child > ParentV2, begin x end)
+        @test_throws SchemaVersionDeclarationError("provided record type symbol is malformed: Childv2") @version(Childv2 > ParentV2, begin x end)
+        @test_throws SchemaVersionDeclarationError("provided record type symbol is malformed: ChildV") @version(ChildV > ParentV2, begin x end)
+        @test_throws SchemaVersionDeclarationError("provided record type symbol is malformed: ChildVTwo") @version(ChildVTwo > ParentV2, begin x end)
         @test_throws SchemaVersionDeclarationError("provided record type expression is malformed: BobV1 > DaveV1 > JoeV1") @version(BobV1 > DaveV1 > JoeV1, begin x end)
         @test_throws SchemaVersionDeclarationError("provided record type expression is malformed: BobV1 < DaveV1") @version(BobV1 < DaveV1, begin x end)
         @test_throws SchemaVersionDeclarationError("cannot have duplicate field names in `@version` declaration; recieved: $([:x, :y, :x, :z])") @version(ChildV2, begin x; y; x; z end)
-        @test_throws SchemaVersionDeclarationError("parent schema version cannot be used before it has been declared: SchemaVersion(\"test.parent\", 2)") @version(ChildV2 > ParentV2, begin x end)
-        @test_throws SchemaVersionDeclarationError("parent schema version cannot be used before it has been declared: SchemaVersion(\"test.new\", 1)") @version(ChildV2 > NewV1, begin y::Int end)
-        @test_throws SchemaVersionDeclarationError("cannot extend from a different version of the same schema") @version(ChildV2 > ChildV1, begin x end)
+        @test_throws SchemaVersionDeclarationError("cannot extend from another version of the same schema") @version(ChildV2 > ChildV1, begin x end)
         @test_throws SchemaVersionDeclarationError("declared field types violate parent's field types") @version(NewV1 > ParentV1, begin y::Int end)
         @test_throws SchemaVersionDeclarationError("declared field types violate parent's field types") @version(NewV1 > ChildV1, begin y::Int end)
         @test_throws SchemaVersionDeclarationError("invalid redeclaration of existing schema version; all `@version` redeclarations must exactly match previous declarations") @version(ParentV1, begin x; y end)
         @test_throws SchemaVersionDeclarationError("malformed `@version` field expression: f()") @version(ChildV2, begin f() end)
     end
+
+    @test_throws UndefVarError(:UnknownV1) @version(ChildV1 > UnknownV1, begin x end)
 
     undeclared = SchemaVersion("undeclared", 3)
 
@@ -383,3 +384,32 @@ end
     t = Arrow.tobuffer((a=[1, 2], b=[3, 4]); metadata=Dict(Legolas.LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY => "haha@3"))
     @test_throws Legolas.UnknownSchemaVersionError Legolas.read(t)
 end
+
+#####
+##### cross-module `@schema`/`@version` declaration behaviors (ref https://github.com/beacon-biosignals/Legolas.jl/issues/65)
+#####
+
+module A
+    using Legolas
+    Legolas.@schema "a.cross" Cross
+    Legolas.@version CrossV1 begin x::Number end
+end
+
+module B
+    # this module tests referencing extenal module's record types in the parent position
+    using ..A
+    using Legolas
+    Legolas.@schema "b.cross" Cross
+    Legolas.@version CrossV1 > A.CrossV1 begin x::Int end
+end
+
+@test A.CrossV1 <: Legolas.AbstractRecord
+@test B.CrossV1 <: Legolas.AbstractRecord
+@test Legolas.parent(B.CrossV1SchemaVersion()) == A.CrossV1SchemaVersion()
+
+# test that one cannot declare new versions of a schema declared in a different module
+@test_throws SchemaVersionDeclarationError("provided record type expression is malformed: A.CrossV2") @version(A.CrossV2, begin x::Int end)
+@test_throws SchemaVersionDeclarationError("missing prior `@schema` declaration for `Cross` in current module") @version(CrossV2, begin x::Int end)
+
+# overwriting another module's reserved schema name is disallowed
+@test_throws ArgumentError("A schema with this name was already declared by a different module: $A") @schema("a.cross", Cross)
