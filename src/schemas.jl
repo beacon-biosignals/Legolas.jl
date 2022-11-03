@@ -323,6 +323,9 @@ macro schema(schema_name, schema_prefix)
             throw(ArgumentError(string("A schema with this name was already declared by a different module: ", m)))
         else
             Legolas._schema_declared_in_module(::Val{Symbol($schema_name)}) = @__MODULE__
+            if !isdefined(@__MODULE__, :__legolas_schema_name_from_prefix__)
+                $(esc(:__legolas_schema_name_from_prefix__))(::Val) = nothing
+            end
             $(esc(:__legolas_schema_name_from_prefix__))(::Val{$(Base.Meta.quot(schema_prefix))}) = $(Base.Meta.quot(Symbol(schema_name)))
         end
     end
@@ -531,8 +534,9 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
     end
 
     # generate `arrow_overload_definitions`
-    record_type_arrow_name = Base.Meta.quot(Symbol("JuliaLang.Legolas.Generated.$R"))
+    record_type_arrow_name = gensym()
     arrow_overload_definitions = quote
+        const $record_type_arrow_name = Symbol(string("JuliaLang.", @__MODULE__, '.', $(Base.Meta.quot(R))))
         $Arrow.ArrowTypes.arrowname(::Type{<:$R}) = $record_type_arrow_name
         $Arrow.ArrowTypes.ArrowType(::Type{R}) where {R<:$R} = NamedTuple{fieldnames(R),Tuple{fieldtypes(R)...}}
         $Arrow.ArrowTypes.toarrow(r::$R) = NamedTuple(r)
