@@ -26,6 +26,7 @@ Legolas.declared
 Legolas.find_violation
 Legolas.complies_with
 Legolas.validate
+Legolas.accepted_field_type
 ```
 
 ## Validating/Writing/Reading Legolas Tables

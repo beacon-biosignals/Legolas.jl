@@ -216,7 +216,29 @@ Arrow.ArrowTypes.fromarrow(::Type{<:SchemaVersion}, id) = first(parse_identifier
 ##### `Tables.Schema` validation
 #####
 
-@inline accepted_field_type(::SchemaVersion, T) = T
+"""
+    Legolas.accepted_field_type(sv::Legolas.SchemaVersion, T::Type)
+
+Return the "maximal supertype" of `T` that is accepted by `sv` when evaluating a
+field of type `>:T` for schematic compliance via [`Legolas.find_violation`](@ref);
+see that function's docstring for an explanation of this function's use in context.
+
+`SchemaVersion` authors may overload this function to broaden particular type
+constraints that determine schematic compliance for their `SchemaVersion`, without
+needing to broaden the type constraints employed by their `SchemaVersion`'s
+record type.
+
+Legolas itself defines the following default overloads:
+
+    accepted_field_type(::SchemaVersion, T::Type) = T
+    accepted_field_type(::SchemaVersion, ::Type{UUID}) = Union{UUID,UInt128}
+    accepted_field_type(::SchemaVersion, ::Type{Symbol}) = Union{Symbol,String}
+
+Outside of these default overloads, this function should only be overloaded against specific
+`SchemaVersion`s that are authored within the same module as the overload definition; to do
+otherwise constitutes type piracy and should be avoided.
+"""
+@inline accepted_field_type(::SchemaVersion, T::Type) = T
 accepted_field_type(::SchemaVersion, ::Type{UUID}) = Union{UUID,UInt128}
 accepted_field_type(::SchemaVersion, ::Type{Symbol}) = Union{Symbol,String}
 
