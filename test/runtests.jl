@@ -404,9 +404,9 @@ module B
 end
 
 @test A.CrossV1 <: Legolas.AbstractRecord
-@test Arrow.ArrowTypes.arrowname(A.CrossV1) == Symbol("JuliaLang.$(A).CrossV1")
+@test Arrow.ArrowTypes.arrowname(A.CrossV1) == Symbol("JuliaLang.Legolas.Generated.a.cross.1")
 @test B.CrossV1 <: Legolas.AbstractRecord
-@test Arrow.ArrowTypes.arrowname(B.CrossV1) == Symbol("JuliaLang.$(B).CrossV1")
+@test Arrow.ArrowTypes.arrowname(B.CrossV1) == Symbol("JuliaLang.Legolas.Generated.b.cross.1")
 @test Legolas.parent(B.CrossV1SchemaVersion()) == A.CrossV1SchemaVersion()
 
 # test that one cannot declare new versions of a schema declared in a different module

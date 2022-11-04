@@ -534,9 +534,9 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
     end
 
     # generate `arrow_overload_definitions`
-    record_type_arrow_name = gensym()
+    record_type_arrow_name = string("JuliaLang.Legolas.Generated.", Legolas.name(schema_version), '.', Legolas.version(schema_version))
+    record_type_arrow_name = Base.Meta.quot(Symbol(record_type_arrow_name))
     arrow_overload_definitions = quote
-        const $record_type_arrow_name = Symbol(string("JuliaLang.", @__MODULE__, '.', $(Base.Meta.quot(R))))
         $Arrow.ArrowTypes.arrowname(::Type{<:$R}) = $record_type_arrow_name
         $Arrow.ArrowTypes.ArrowType(::Type{R}) where {R<:$R} = NamedTuple{fieldnames(R),Tuple{fieldtypes(R)...}}
         $Arrow.ArrowTypes.toarrow(r::$R) = NamedTuple(r)
