@@ -328,6 +328,7 @@ macro schema(schema_name, schema_prefix)
             end
             $(esc(:__legolas_schema_name_from_prefix__))(::Val{$(Base.Meta.quot(schema_prefix))}) = $(Base.Meta.quot(Symbol(schema_name)))
         end
+        nothing
     end
 end
 
@@ -650,7 +651,7 @@ Note that this macro expects to be evaluated within top-level scope.
 For more details and examples, please see `Legolas.jl/examples/tour.jl` and the
 "Schema-Related Concepts/Conventions" section of the Legolas.jl documentation.
 """
-macro version(record_type, required_field_statements)
+macro version(record_type, required_fields_block)
     # parse `record_type`
     if record_type isa Symbol
         parent_record_type = nothing
@@ -666,11 +667,12 @@ macro version(record_type, required_field_statements)
     schema_prefix, schema_version_integer = x
     quoted_schema_prefix = Base.Meta.quot(schema_prefix)
 
-    # parse `required_field_statements`
-    if !(required_field_statements isa Expr && required_field_statements.head == :block && !isempty(required_field_statements.args))
-        return :(throw(SchemaVersionDeclarationError("malformed or missing declaration of required fields")))
+    # parse `required_fields_block`
+    required_field_statements = Any[]
+    if required_fields_block isa Expr && required_fields_block.head == :block && !isempty(required_fields_block.args)
+        required_field_statements = [f for f in required_fields_block.args if !(f isa LineNumberNode)]
     end
-    required_field_statements = [f for f in required_field_statements.args if !(f isa LineNumberNode)]
+    isempty(required_field_statements) && return :(throw(SchemaVersionDeclarationError("malformed or missing declaration of required fields")))
     required_field_infos = RequiredFieldInfo[]
     for stmt in required_field_statements
         original_stmt = Base.Meta.quot(deepcopy(stmt))
