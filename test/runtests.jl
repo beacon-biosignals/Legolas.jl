@@ -174,6 +174,7 @@ end
     @test_throws ArgumentError("`name` provided to `@schema` should not include an `@` version clause") @schema("joe@1", J)
     @test_throws ArgumentError("`name` provided to `@schema` is not a valid `Legolas.SchemaVersion` name: \"joe?\"") @schema("joe?", J)
     @test_throws ArgumentError("`Prefix` provided to `@schema` is not a valid type name: J{Int}") @schema("joo", J{Int})
+    @test isnothing(@schema "test.returns-nothing" ReturnsNothing)
 end
 
 @schema "test.parent" Parent
@@ -222,6 +223,7 @@ end
 
 @testset "`Legolas.@version` and associated utilities for declared `Legolas.SchemaVersion`s" begin
     @testset "Legolas.SchemaVersionDeclarationError" begin
+        @test_throws SchemaVersionDeclarationError("malformed or missing declaration of required fields") eval(:(@version(NewV1, $(Expr(:block, LineNumberNode(1, :test))))))
         @test_throws SchemaVersionDeclarationError("malformed or missing declaration of required fields") @version(ChildV2, begin end)
         @test_throws SchemaVersionDeclarationError("missing prior `@schema` declaration for `Unknown` in current module") @version(UnknownV1 > ChildV1, begin x end)
         @test_throws SchemaVersionDeclarationError("provided record type symbol is malformed: Child") @version(Child, begin x end)
