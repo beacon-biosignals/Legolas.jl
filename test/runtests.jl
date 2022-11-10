@@ -221,6 +221,15 @@ end
 
 @schema "test.new" New
 
+@schema "test.has-a-v1-in-the-middle" HasAV1InTheMiddle
+@version HasAV1InTheMiddleV1 begin
+    id::UUID
+end
+@version HasAV1InTheMiddleV2 begin
+    id::UUID
+    x::Int
+end
+
 @testset "`Legolas.@version` and associated utilities for declared `Legolas.SchemaVersion`s" begin
     @testset "Legolas.SchemaVersionDeclarationError" begin
         @test_throws SchemaVersionDeclarationError("malformed or missing declaration of required fields") eval(:(@version(NewV1, $(Expr(:block, LineNumberNode(1, :test))))))

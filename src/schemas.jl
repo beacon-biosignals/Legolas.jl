@@ -560,7 +560,7 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
 end
 
 function _parse_record_type_symbol(t::Symbol)
-    pv = split(string(t), 'V')
+    pv = rsplit(string(t), 'V'; limit=2)
     if length(pv) == 2
         p, v = pv
         p = Symbol(p)
