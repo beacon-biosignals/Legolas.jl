@@ -2,7 +2,7 @@
 
 This guide is incomplete; please add to it if you encounter items which would help other upgraders along their journey.
 
-See [here](https://github.com/beacon-biosignals/Legolas.jl/pull/54) for an example of a comprehensive log of changes from Legolas v0.4 to Legolas v0.5.
+See [here](https://github.com/beacon-biosignals/Legolas.jl/pull/54) for a comprehensive log of changes from Legolas v0.4 to Legolas v0.5.
 
 ## Some main changes to be aware of
 
