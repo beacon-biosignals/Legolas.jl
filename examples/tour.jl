@@ -96,7 +96,7 @@ s = Tables.Schema((:a, :b, :c, :d), (Int, String, Float64, Any)) # The type of r
 # presence of pre-specified declared fields, assuming non-present fields to be implicitly `missing`, and allowing
 # the presence of non-required fields - were chosen such that the question "Does the table `t` comply with the Legolas
 # schema version `s`?" is roughly equivalent to "Can a logical view be trivially constructed atop table `t` that contains
-# only the required fields declared by `s`?" The ability to cleanly ask this question enables a weak notion of "subtyping"
+# only the required fields declared by `s`?". The ability to cleanly ask this question enables a weak notion of "subtyping"
 # (see https://en.wikipedia.org/wiki/Duck_typing, https://en.wikipedia.org/wiki/Liskov_substitution_principle) that is
 # core to Legolas' mechanisms for defining, extending, and versioning interfaces to tabular data.
 
@@ -120,7 +120,7 @@ fields = (a=1.0, b="hi", c=π, d=[1, 2, 3])
 #
 # - ...contain the associated schema version's required fields in any order
 # - ...elide required fields, in which case the constructor will assume them to be `missing`
-# - ...contain any other fields in addition to the required fields; such additional fields are simply ignored
+# - ...contain any other fields in addition to the required fields; such additional fields are simply dropped
 #
 # Demonstrating a few of these properties:
 
