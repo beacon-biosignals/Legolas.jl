@@ -120,7 +120,8 @@ fields = (a=1.0, b="hi", c=π, d=[1, 2, 3])
 #
 # - ...contain the associated schema version's required fields in any order
 # - ...elide required fields, in which case the constructor will assume them to be `missing`
-# - ...contain any other fields in addition to the required fields; such additional fields are simply dropped
+# - ...contain any other fields in addition to the required fields; such additional fields are simply ignored 
+#   by the constructor and are not propagated through to the resulting record.
 #
 # Demonstrating a few of these properties:
 
