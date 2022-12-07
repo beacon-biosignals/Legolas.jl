@@ -230,6 +230,17 @@ end
     x::Int
 end
 
+@schema "test.documented" Documented
+
+"""
+    DocumentedV1
+
+Very detailed documentation.
+"""
+@version DocumentedV1 begin
+    x
+end
+
 @testset "`Legolas.@version` and associated utilities for declared `Legolas.SchemaVersion`s" begin
     @testset "Legolas.SchemaVersionDeclarationError" begin
         @test_throws SchemaVersionDeclarationError("malformed or missing declaration of required fields") eval(:(@version(NewV1, $(Expr(:block, LineNumberNode(1, :test))))))
@@ -368,6 +379,11 @@ end
     roundtripped = Legolas.read(Legolas.tobuffer(tbl, NestedAgainV1SchemaVersion()))
     @test roundtripped.n[1] == NestedV1(; gc=GrandchildV1(r0_roundtripped), k="test")
     @test roundtripped.h[1] == 3
+
+    @testset "docstring support" begin
+        ds = Docs.docstr(Docs.Binding(@__MODULE__, :DocumentedV1))
+        @test contains(first(ds.text), "Very detailed documentation")
+    end
 end
 
 @testset "miscellaneous Legolas/src/tables.jl tests" begin

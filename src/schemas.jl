@@ -711,6 +711,7 @@ macro version(record_type, required_fields_block)
             elseif parent isa Legolas.SchemaVersion && !(Legolas._has_valid_child_field_types($declared_field_names_types, Legolas.required_fields(parent)))
                 throw(SchemaVersionDeclarationError("declared field types violate parent's field types"))
             else
+                Base.@__doc__($(Base.Meta.quot(record_type)))
                 $(esc(:eval))(Legolas._generate_schema_version_definitions(schema_version, parent, $declared_field_names_types, schema_version_declaration))
                 $(esc(:eval))(Legolas._generate_validation_definitions(schema_version))
                 $(esc(:eval))(Legolas._generate_record_type_definitions(schema_version, $(Base.Meta.quot(record_type))))
