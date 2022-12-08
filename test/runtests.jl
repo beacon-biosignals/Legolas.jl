@@ -381,8 +381,8 @@ end
     @test roundtripped.h[1] == 3
 
     @testset "docstring support" begin
-        ds = Docs.docstr(Docs.Binding(@__MODULE__, :DocumentedV1))
-        @test contains(first(ds.text), "Very detailed documentation")
+        ds = string(@doc DocumentedV1)
+        @test contains(ds, "Very detailed documentation")
     end
 end
 
