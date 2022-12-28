@@ -461,16 +461,18 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
     field_definitions = Expr[]
     field_assignments = Expr[]
     for (fname, ftype) in pairs(record_fields)
-        fdef = :($fname::$(Base.Meta.quot(ftype)))
+        T = Base.Meta.quot(ftype)
+        fdef = :($fname::$T)
         info = get(declared_field_infos, fname, nothing)
         if !isnothing(info)
-            fstmt = info.statement
             if info.parameterize
                 T = Symbol("_", string(fname, "_T"))
                 push!(type_param_defs, :($T <: $(info.type)))
                 push!(names_of_parameterized_fields, fname)
                 fdef = :($fname::$T)
-                fstmt = :($fname = $(fstmt.args[2]))
+                fstmt = :($fname = $(info.statement.args[2]))
+            else
+                fstmt = :($fname = convert($T, $(info.statement.args[2]))::$T)
             end
             push!(field_assignments, fstmt)
         end
