@@ -444,7 +444,7 @@ end
 @test_throws ArgumentError("A schema with this name was already declared by a different module: $A") @schema("a.cross", Cross)
 
 #####
-##### local field variable handling in record constructors (ref https://github.com/beacon-biosignals/Legolas.jl/issues/65)
+##### local field variable handling in record constructors (ref https://github.com/beacon-biosignals/Legolas.jl/issues/76)
 #####
 
 Legolas.@schema "unconstrained-field" UnconstrainedField
