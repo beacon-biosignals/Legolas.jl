@@ -442,3 +442,22 @@ end
 
 # overwriting another module's reserved schema name is disallowed
 @test_throws ArgumentError("A schema with this name was already declared by a different module: $A") @schema("a.cross", Cross)
+
+#####
+##### local field variable handling in record constructors (ref https://github.com/beacon-biosignals/Legolas.jl/issues/76)
+#####
+
+Legolas.@schema "unconstrained-field" UnconstrainedField
+
+Legolas.@version UnconstrainedFieldV1 begin
+    field::Any
+end
+
+Legolas.@schema "constrained-field" ConstrainedField
+
+Legolas.@version ConstrainedFieldV1 > UnconstrainedFieldV1 begin
+    field::Int = parse(Int, field)
+end
+
+c = ConstrainedFieldV1(field = "1")
+@test c.field == 1
