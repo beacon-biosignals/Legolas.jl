@@ -22,6 +22,8 @@ Legolas.identifier
 Legolas.parent
 Legolas.required_fields
 Legolas.declaration
+Legolas.record_type
+Legolas.schema_version_from_record
 Legolas.declared
 Legolas.find_violation
 Legolas.complies_with
