@@ -195,6 +195,15 @@ does not include the contents of `declaration(parent(sv))`.
 """
 declaration(sv::SchemaVersion) = throw(UnknownSchemaVersionError(sv))
 
+"""
+    Legolas.record_type(sv::Legolas.SchemaVersion)
+
+Return the `Legolas.AbstractRecord` subtype associated with `sv`.
+
+See also: `[Legolas.schema_version_from_record]`
+"""
+record_type(sv::SchemaVersion) = throw(UnknownSchemaVersionError(sv))
+
 #####
 ##### `SchemaVersion` printing
 #####
@@ -295,6 +304,15 @@ abstract type AbstractRecord <: Tables.AbstractRow end
 @inline Tables.getcolumn(r::AbstractRecord, nm::Symbol) = getfield(r, nm)
 @inline Tables.columnnames(r::AbstractRecord) = fieldnames(typeof(r))
 @inline Tables.schema(::AbstractVector{R}) where {R<:AbstractRecord} = Tables.Schema(fieldnames(R), fieldtypes(R))
+
+"""
+    Legolas.schema_version_from_record(record::Legolas.AbstractRecord)
+
+Return the `Legolas.SchemaVersion` instance associated with `record`.
+
+See also: [`Legolas.record_type`](@ref)
+"""
+function schema_version_from_record end
 
 #####
 ##### `@schema`
@@ -439,7 +457,6 @@ function _generate_validation_definitions(schema_version::SchemaVersion)
     end
 end
 
-_record_type_from_schema_version(::Nothing) = nothing
 _schema_version_from_record_type(::Nothing) = nothing
 
 # Note also that this function's implementation is allowed to "observe" `Legolas.required_fields(parent)`
@@ -485,7 +502,7 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
     parent = Legolas.parent(schema_version)
     if !isnothing(parent)
         p = gensym()
-        P = Base.Meta.quot(_record_type_from_schema_version(parent))
+        P = Base.Meta.quot(record_type(parent))
         parent_record_field_names = keys(required_fields(parent))
         parent_record_application = quote
             $p = $P(; $(parent_record_field_names...))
@@ -556,7 +573,8 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
         $outer_constructor_definitions
         $base_overload_definitions
         $arrow_overload_definitions
-        Legolas._record_type_from_schema_version(::$(Base.Meta.quot(typeof(schema_version)))) = $R
+        Legolas.record_type(::$(Base.Meta.quot(typeof(schema_version)))) = $R
+        Legolas.schema_version_from_record(::$R) = $schema_version
         Legolas._schema_version_from_record_type(::Type{<:$R}) = $schema_version
     end
 end

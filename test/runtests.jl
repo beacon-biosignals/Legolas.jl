@@ -338,6 +338,13 @@ end
                                                                                                         RequiredFieldInfo(:y, :String, false, :(y::String = string(y[1:2])))])
     end
 
+    @testset "Legolas.record_type" begin
+        @test_throws Legolas.UnknownSchemaVersionError(undeclared) Legolas.record_type(undeclared)
+        @test Legolas.record_type(ParentV1SchemaVersion()) == ParentV1
+        @test Legolas.record_type(ChildV1SchemaVersion()) == ChildV1
+        @test Legolas.record_type(GrandchildV1SchemaVersion()) == GrandchildV1
+    end
+
     r0 = (x=[42], y="foo", z=:three, a=1.3)
     r0_arrow = first(Tables.rows(Arrow.Table(Arrow.tobuffer([r0]))))
 
@@ -352,6 +359,10 @@ end
     @test NamedTuple(GrandchildV1(r0)) == (x=[42], y="fo", z=:three, a=1)
     @test GrandchildV1(r0) == GrandchildV1(; r0.x, r0.y, r0.z, r0.a)
     @test GrandchildV1(r0) == GrandchildV1(r0_arrow)
+
+    @test Legolas.schema_version_from_record(ParentV1(r0)) == ParentV1SchemaVersion()
+    @test Legolas.schema_version_from_record(ChildV1(r0)) == ChildV1SchemaVersion()
+    @test Legolas.schema_version_from_record(GrandchildV1(r0)) == GrandchildV1SchemaVersion()
 
     tbl = Arrow.Table(Arrow.tobuffer((; x=[ParentV1(r0)])))
     @test tbl.x[1] == ParentV1(Tables.rowmerge(r0))
