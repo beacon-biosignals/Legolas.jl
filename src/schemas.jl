@@ -200,7 +200,7 @@ declaration(sv::SchemaVersion) = throw(UnknownSchemaVersionError(sv))
 
 Return the `Legolas.AbstractRecord` subtype associated with `sv`.
 
-See also: `[Legolas.schema_version_from_record]`
+See also: [`Legolas.schema_version_from_record`](@ref)
 """
 record_type(sv::SchemaVersion) = throw(UnknownSchemaVersionError(sv))
 
