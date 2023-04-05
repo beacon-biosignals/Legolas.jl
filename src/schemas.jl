@@ -483,7 +483,7 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
         info = get(declared_field_infos, fname, nothing)
         if !isnothing(info)
             if info.parameterize
-                T = Symbol("_", string(fname, "_T"))
+                T = gensym(string(fname, "_T"))
                 push!(type_param_defs, :($T <: $(info.type)))
                 push!(names_of_parameterized_fields, fname)
                 fdef = :($fname::$T)
