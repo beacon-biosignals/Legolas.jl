@@ -244,6 +244,12 @@ Very detailed documentation.
     x
 end
 
+@schema "test.param" Param
+
+@version ParamV1 begin
+    i::(<:Integer)
+end
+
 @testset "`Legolas.@version` and associated utilities for declared `Legolas.SchemaVersion`s" begin
     @testset "Legolas.SchemaVersionDeclarationError" begin
         @test_throws SchemaVersionDeclarationError("malformed or missing declaration of required fields") eval(:(@version(NewV1, $(Expr(:block, LineNumberNode(1, :test))))))
@@ -397,6 +403,12 @@ end
     @testset "docstring support" begin
         ds = string(@doc DocumentedV1)
         @test contains(ds, "Very detailed documentation")
+    end
+
+    @testset "parameterized" begin
+        @test typeof(ParamV1(i=1)) === ParamV1{Int}
+        @test typeof(ParamV1{Integer}(i=1)) === ParamV1{Integer}
+        @test typeof(ParamV1{Int}(i=1.0)) === ParamV1{Int}
     end
 end
 
