@@ -409,6 +409,9 @@ end
         @test typeof(ParamV1(i=1)) === ParamV1{Int}
         @test typeof(ParamV1{Integer}(i=1)) === ParamV1{Integer}
         @test typeof(ParamV1{Int}(i=1.0)) === ParamV1{Int}
+        @test_throws TypeError ParamV1{Float64}(i=1)
+        @test_throws TypeError ParamV1(i=1.0)
+        @test_throws InexactError ParamV1{Int}(i=1.1)
     end
 end
 
