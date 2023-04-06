@@ -1,3 +1,4 @@
+using Compat: current_exceptions
 using Legolas, Test, DataFrames, Arrow, UUIDs
 using Legolas: SchemaVersion, @schema, @version, SchemaVersionDeclarationError, RequiredFieldInfo
 
@@ -560,7 +561,7 @@ end
     end
 
     @testset "reports modifications" begin
-        msg = "ArgumentError: Invalid value set for field a, expected Integer, got a value of type String (\"foo-bar\")"
-        @test_throws msg FieldErrorV3(; a="foo bar")
+        e = ArgumentError("Invalid value set for field a, expected Integer, got a value of type String (\"foo-bar\")")
+        @test_throws e FieldErrorV3(; a="foo bar")
     end
 end
