@@ -483,26 +483,29 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
         fdef = :($fname::$T)
         info = get(declared_field_infos, fname, nothing)
         if !isnothing(info)
+            fex = :(throw(ArgumentError("Invalid value set for field $($fsym), expected $($(info.type)), got a value of type $(typeof($fname)) ($(repr($(fname))))")))
             if info.parameterize
                 T = Symbol("_", string(fname, "_T"))
                 push!(type_param_defs, :($T <: $(info.type)))
                 push!(names_of_parameterized_fields, fname)
                 fdef = :($fname::$T)
-                fstmt = :($fname = $(info.statement.args[2]))
                 fstmt = quote
-                    $fname = $(info.statement.args[2])
+                    try
+                        $fname = $(info.statement.args[2])
+                    catch
+                        throw($fex)
+                    end
                     if !($fname isa $(info.type))
                         throw(TypeError($(Base.Meta.quot(record_type_symbol)), "field $($fsym)", $(info.type), $fname))
                     end
-                    # TypeError: in DemoV2, in _a_T, expected _a_T<:String, got Type{SubString{String}}
                 end
             else
                 fstmt = quote
-                    $fname = $(info.statement.args[2])
-                    $fname = try
-                        convert($T, $fname)::$T
-                    catch e
-                        throw(ArgumentError("Invalid value set for field $($fsym): $(repr($(fname)))"))
+                    try
+                        $fname = $(info.statement.args[2])
+                        $fname = convert($T, $fname)::$T
+                    catch
+                        throw($fex)
                     end
                 end
             end
