@@ -513,7 +513,7 @@ end
 
         @test length(ex_stack) == 2
         @test sprint(showerror, ex_stack[1].exception) == "ArgumentError: Must be a, b, or c"
-        @test sprint(showerror, ex_stack[2].exception) == "ArgumentError: Invalid value set for field a, expected Union{Missing, String}, got a value of type String (\"invalid\")"
+        @test sprint(showerror, ex_stack[2].exception) == "ArgumentError: Invalid value set for field a, custom field assignment failed for: \"invalid\""
 
         ex_stack = try
             FieldErrorV1(; b="invalid")
@@ -523,7 +523,7 @@ end
 
         @test length(ex_stack) == 2
         @test sprint(showerror, ex_stack[1].exception) == "ArgumentError: Must be a, b, or c"
-        @test sprint(showerror, ex_stack[2].exception) == "ArgumentError: Invalid value set for field b, expected Union{Missing, String}, got a value of type String (\"invalid\")"
+        @test sprint(showerror, ex_stack[2].exception) == "ArgumentError: Invalid value set for field b, custom field assignment failed for: \"invalid\""
 
         ex_stack = try
             FieldErrorV1(; c="3")

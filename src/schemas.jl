@@ -483,7 +483,13 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
         fdef = :($fname::$T)
         info = get(declared_field_infos, fname, nothing)
         if !isnothing(info)
-            fex = :(throw(ArgumentError("Invalid value set for field $($fsym), expected $($(info.type)), got a value of type $(typeof($fname)) ($(repr($(fname))))")))
+            fcatch = quote
+                if $fname isa $(info.type)
+                    throw(ArgumentError("Invalid value set for field $($fsym), custom field assignment failed for: $(repr($(fname)))"))
+                else
+                    throw(ArgumentError("Invalid value set for field $($fsym), expected $($(info.type)), got a value of type $(typeof($fname)) ($(repr($(fname))))"))
+                end
+            end
             if info.parameterize
                 T = gensym(string(fname, "_T"))
                 push!(type_param_defs, :($T <: $(info.type)))
@@ -493,7 +499,7 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
                     try
                         $fname = $(info.statement.args[2])
                     catch
-                        throw($fex)
+                        $fcatch
                     end
                     if !($fname isa $(info.type))
                         throw(TypeError($(Base.Meta.quot(record_type_symbol)), "field $($fsym)", $(info.type), $fname))
@@ -505,7 +511,7 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
                         $fname = $(info.statement.args[2])
                         $fname = convert($T, $fname)::$T
                     catch
-                        throw($fex)
+                        $fcatch
                     end
                 end
             end
