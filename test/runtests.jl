@@ -3,7 +3,10 @@ using Legolas: SchemaVersion, @schema, @version, SchemaVersionDeclarationError, 
 
 @test_throws SchemaVersionDeclarationError("no prior `@schema` declaration found in current module") @version(TestV1, begin x end)
 
-include(joinpath(dirname(@__DIR__), "examples", "tour.jl"))
+# Isolate schema defined in the tour from the rest of the tests
+module Tour
+    include(joinpath(dirname(@__DIR__), "examples", "tour.jl"))
+end
 
 @testset "Legolas.lift" begin
     @test ismissing(Legolas.lift(sin, nothing))
