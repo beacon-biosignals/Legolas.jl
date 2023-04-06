@@ -478,6 +478,7 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
     field_definitions = Expr[]
     field_assignments = Expr[]
     for (fname, ftype) in pairs(record_fields)
+        fsym = Base.Meta.quot(fname)
         T = Base.Meta.quot(ftype)
         fdef = :($fname::$T)
         info = get(declared_field_infos, fname, nothing)
@@ -488,8 +489,22 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
                 push!(names_of_parameterized_fields, fname)
                 fdef = :($fname::$T)
                 fstmt = :($fname = $(info.statement.args[2]))
+                fstmt = quote
+                    $fname = $(info.statement.args[2])
+                    if !($fname isa $(info.type))
+                        throw(TypeError($(Base.Meta.quot(record_type_symbol)), "field $($fsym)", $(info.type), $fname))
+                    end
+                    # TypeError: in DemoV2, in _a_T, expected _a_T<:String, got Type{SubString{String}}
+                end
             else
-                fstmt = :($fname = convert($T, $(info.statement.args[2]))::$T)
+                fstmt = quote
+                    $fname = $(info.statement.args[2])
+                    $fname = try
+                        convert($T, $fname)::$T
+                    catch e
+                        throw(ArgumentError("Invalid value set for field $($fsym): $(repr($(fname)))"))
+                    end
+                end
             end
             push!(field_assignments, fstmt)
         end
