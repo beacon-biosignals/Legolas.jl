@@ -530,13 +530,11 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
                 $(field_assignments...)
                 return new{$(type_param_names...)}($(keys(record_fields)...))
             end
-            function $R(; $(field_kwargs...))
-                $parent_record_application
-                $(field_assignments...)
-                return new{$((:(typeof($n)) for n in names_of_parameterized_fields)...)}($(keys(record_fields)...))
-            end
         end
         outer_constructor_definitions = quote
+            function $R(; $(field_kwargs...))
+                return $R{$((:(typeof($n)) for n in names_of_parameterized_fields)...)}(; $(keys(record_fields)...))
+            end
             $outer_constructor_definitions
             $R{$(type_param_names...)}(row) where {$(type_param_names...)} = $R{$(type_param_names...)}(; $(kwargs_from_row...))
         end
