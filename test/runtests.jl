@@ -514,7 +514,7 @@ end
 
         @test length(ex_stack) == 2
         @test sprint(showerror, ex_stack[1].exception) == "ArgumentError: Must be a, b, or c"
-        @test sprint(showerror, ex_stack[2].exception) == "ArgumentError: Invalid value set for field a, custom field assignment failed for: \"invalid\""
+        @test sprint(showerror, ex_stack[2].exception) == "ArgumentError: Invalid value set for field a (\"invalid\")"
 
         ex_stack = try
             FieldErrorV1(; b="invalid")
@@ -524,7 +524,7 @@ end
 
         @test length(ex_stack) == 2
         @test sprint(showerror, ex_stack[1].exception) == "ArgumentError: Must be a, b, or c"
-        @test sprint(showerror, ex_stack[2].exception) == "ArgumentError: Invalid value set for field b, custom field assignment failed for: \"invalid\""
+        @test sprint(showerror, ex_stack[2].exception) == "ArgumentError: Invalid value set for field b (\"invalid\")"
 
         ex_stack = try
             FieldErrorV1(; c="3")
