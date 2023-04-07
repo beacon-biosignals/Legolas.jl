@@ -268,6 +268,10 @@ find_violation(::Tables.Schema, sv::SchemaVersion) = throw(UnknownSchemaVersionE
 
 function _find_violation end
 
+find_violations(::Tables.Schema, sv::SchemaVersion) = throw(UnknownSchemaVersionError(sv))
+
+function _find_violations end
+
 """
     Legolas.validate(ts::Tables.Schema, sv::Legolas.SchemaVersion)
 
@@ -278,8 +282,10 @@ See also: [`Legolas.find_violation`](@ref), [`Legolas.complies_with`](@ref)
 """
 function validate(ts::Tables.Schema, sv::SchemaVersion)
     result = find_violation(ts, sv)
+    # @info result
     isnothing(result) && return nothing
     field, violation = result
+    # @info "DEETS" field violation
     ismissing(violation) && throw(ArgumentError("could not find expected field `$field` in $ts"))
     expected = getfield(required_fields(sv), field)
     throw(ArgumentError("field `$field` has unexpected type; expected <:$expected, found $violation"))
@@ -449,9 +455,29 @@ function _generate_validation_definitions(schema_version::SchemaVersion)
             isnothing(result) || return $fname => result
         end)
     end
+
+    multifield_violation_check = Expr[] # the function body
+    myvector = gensym()
+    push!(multifield_violation_check, :($myvector = Any[]))
+    for (fname, ftype) in pairs(required_fields(schema_version))
+        fname = Base.Meta.quot(fname)
+        push!(multifield_violation_check, quote
+            S = $Legolas.accepted_field_type(sv, $ftype)
+            result = $Legolas._check_for_expected_field(ts, $fname, S)
+            isnothing(result) || push!($myvector, ($fname => result))
+        end)
+    end
+    push!(multifield_violation_check, :(return $myvector))
+
     return quote
         function $(Legolas).find_violation(ts::$(Tables).Schema, sv::$(Base.Meta.quot(typeof(schema_version))))
             $(field_violation_check_statements...)
+            return nothing
+        end
+
+        # Multiple violation reporting
+        function $(Legolas).find_violations(ts::$(Tables).Schema, sv::$(Base.Meta.quot(typeof(schema_version))))
+            $(multifield_violation_check...)
             return nothing
         end
     end
