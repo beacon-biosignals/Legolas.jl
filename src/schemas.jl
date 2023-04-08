@@ -254,7 +254,7 @@ accepted_field_type(::SchemaVersion, ::Type{Symbol}) = Union{Symbol,String}
 """
     Legolas.find_violation(ts::Tables.Schema, sv::Legolas.SchemaVersion)
 
-For required field `f::F` of `sv`:
+For each required field `f::F` of `sv`:
 
 - Define `A = Legolas.accepted_field_type(sv, F)`
 - If `f::T` is present in `ts`, ensure that `T <: A` or else immediately return `f::Symbol => T::DataType`.
@@ -262,12 +262,25 @@ For required field `f::F` of `sv`:
 
 Otherwise, return `nothing`.
 
-See also: [`Legolas.validate`](@ref), [`Legolas.complies_with`](@ref)
+See also: [`Legolas.find_violations`](@ref), [`Legolas.validate`](@ref), [`Legolas.complies_with`](@ref)
 """
 find_violation(::Tables.Schema, sv::SchemaVersion) = throw(UnknownSchemaVersionError(sv))
 
 function _find_violation end
 
+"""
+    Legolas.find_violations(ts::Tables.Schema, sv::Legolas.SchemaVersion)
+
+Return vector of all violations for required fields `f::F` of `sv`:
+
+- Define `A = Legolas.accepted_field_type(sv, F)`
+- If `f::T` is present in `ts`, ensure that `T <: A` or else append `f::Symbol => T::DataType` to output vector.
+- If `f` isn't present in `ts`, ensure that `Missing <: A` or else append `f::Symbol => missing::Missing` to output vector.
+
+Otherwise, return `Any[]`.
+
+See also: [`Legolas.find_violation`](@ref), [`Legolas.validate`](@ref), [`Legolas.complies_with`](@ref)
+"""
 find_violations(::Tables.Schema, sv::SchemaVersion) = throw(UnknownSchemaVersionError(sv))
 
 function _find_violations end
@@ -278,17 +291,35 @@ function _find_violations end
 Throws a descriptive `ArgumentError` if `!isnothing(find_violation(ts, sv))`,
 otherwise return `nothing`.
 
-See also: [`Legolas.find_violation`](@ref), [`Legolas.complies_with`](@ref)
+See also: [`Legolas.find_violation`](@ref), [`Legolas.find_violations`](@ref), [`Legolas.complies_with`](@ref)
 """
 function validate(ts::Tables.Schema, sv::SchemaVersion)
-    result = find_violation(ts, sv)
-    # @info result
-    isnothing(result) && return nothing
-    field, violation = result
-    # @info "DEETS" field violation
-    ismissing(violation) && throw(ArgumentError("could not find expected field `$field` in $ts"))
-    expected = getfield(required_fields(sv), field)
-    throw(ArgumentError("field `$field` has unexpected type; expected <:$expected, found $violation"))
+    results = find_violations(ts, sv)
+    isempty(results) && return nothing
+
+    field_err = Any[]
+    type_err = Any[]
+    for result in results
+        field, violation = result
+        if ismissing(violation)
+            push!(field_err, field)
+        else
+            expected = getfield(required_fields(sv), field)
+            push!(type_err, (field, expected, violation))
+        end
+    end
+    err = ""
+    if !isempty(field_err)
+        fields = "`" * join(field_err, "`, `") * "`"
+        err *= string("Could not find expected field", length(field_err) > 1 ? "s " : " ",  fields, " in $ts")
+    end
+    if !isempty(type_err)
+        err *= "Field(s) have unexpected type:\n"
+        for (field, expected, violation) in type_err
+            err *= "Field `$field` has unexpected type; expected <:$expected, found $violation"
+        end
+    end
+    throw(ArgumentError(err))
 end
 
 """

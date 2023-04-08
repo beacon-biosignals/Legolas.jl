@@ -305,16 +305,34 @@ end
 
         t = Tables.Schema((:a, :y, :z), (Int32, String, Any))
         for s in (GrandchildV1SchemaVersion(), ChildV1SchemaVersion(), ParentV1SchemaVersion())
-            @test_throws ArgumentError("could not find expected field `x` in $t") Legolas.validate(t, s)
+            @test_throws ArgumentError("Could not find expected field `x` in $t") Legolas.validate(t, s)
             @test !Legolas.complies_with(t, s)
             @test isequal(Legolas.find_violation(t, s), :x => missing)
+            @test isequal(Legolas.find_violations(t, s), [:x => missing])
+        end
+
+        t = Tables.Schema((:a, :z), (Int32, Any))
+        for s in (GrandchildV1SchemaVersion(), ChildV1SchemaVersion(), ParentV1SchemaVersion())
+            @test_throws ArgumentError("Could not find expected fields `x`, `y` in $t") Legolas.validate(t, s)
+            @test !Legolas.complies_with(t, s)
+            @test isequal(Legolas.find_violation(t, s), :x => missing)
+            @test isequal(Legolas.find_violations(t, s), [:x => missing, :y => missing])
         end
 
         t = Tables.Schema((:x, :a, :y), (ComplexF64, Int32, String))
         for s in (GrandchildV1SchemaVersion(), ChildV1SchemaVersion(), ParentV1SchemaVersion())
-            @test_throws ArgumentError("field `x` has unexpected type; expected <:$(Vector), found $(Complex{Float64})") Legolas.validate(t, s)
+            @test_throws ArgumentError("Field `x` has unexpected type; expected <:$(Vector), found $(Complex{Float64})") Legolas.validate(t, s)
             @test !Legolas.complies_with(t, s)
             @test isequal(Legolas.find_violation(t, s), :x => ComplexF64)
+            @test isequal(Legolas.find_violations(t, s), [:x => ComplexF64])
+        end
+
+        t = Tables.Schema((:x, :a, :y), (ComplexF64, ComplexF64, String))
+        for s in (GrandchildV1SchemaVersion(), ChildV1SchemaVersion(), ParentV1SchemaVersion())
+            @test_throws ArgumentError("Fields `x`, `y` have unexpected type; expected <:$(Vector), found $(Complex{Float64})") Legolas.validate(t, s)
+            @test !Legolas.complies_with(t, s)
+            @test isequal(Legolas.find_violation(t, s), :x => ComplexF64)
+            @test isequal(Legolas.find_violations(t, s), [:x => ComplexF64, :a => ComplexF64])
         end
 
         t = Tables.Schema((:x, :a, :y), (Vector, Int32, String))
