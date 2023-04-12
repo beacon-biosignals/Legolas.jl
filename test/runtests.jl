@@ -514,7 +514,7 @@ end
 
         @test length(ex_stack) == 2
         @test sprint(showerror, ex_stack[1].exception) == "ArgumentError: Must be a, b, or c"
-        @test sprint(showerror, ex_stack[2].exception) == "ArgumentError: Invalid value set for field a (\"invalid\")"
+        @test sprint(showerror, ex_stack[2].exception) == "ArgumentError: Invalid value set for field `a` (\"invalid\")"
 
         ex_stack = try
             FieldErrorV1(; b="invalid")
@@ -524,7 +524,7 @@ end
 
         @test length(ex_stack) == 2
         @test sprint(showerror, ex_stack[1].exception) == "ArgumentError: Must be a, b, or c"
-        @test sprint(showerror, ex_stack[2].exception) == "ArgumentError: Invalid value set for field b (\"invalid\")"
+        @test sprint(showerror, ex_stack[2].exception) == "ArgumentError: Invalid value set for field `b` (\"invalid\")"
 
         ex_stack = try
             FieldErrorV1(; c="3")
@@ -534,7 +534,7 @@ end
 
         @test length(ex_stack) == 2
         @test startswith(sprint(showerror, ex_stack[1].exception), "MethodError: Cannot `convert` an object of type String to an object of type Integer")
-        @test sprint(showerror, ex_stack[2].exception) == "ArgumentError: Invalid value set for field c, expected Union{Missing, Integer}, got a value of type String (\"3\")"
+        @test sprint(showerror, ex_stack[2].exception) == "ArgumentError: Invalid value set for field `c`, expected Union{Missing, Integer}, got a value of type String (\"3\")"
 
         ex_stack = try
             FieldErrorV1(; d=4.0)
@@ -543,7 +543,7 @@ end
         end
 
         @test length(ex_stack) == 1
-        @test sprint(showerror, ex_stack[1].exception) == "TypeError: in FieldErrorV1, in field d, expected Union{Missing, Integer}, got a value of type Float64"
+        @test sprint(showerror, ex_stack[1].exception) == "TypeError: in FieldErrorV1, in field `d`, expected Union{Missing, Integer}, got a value of type Float64"
     end
 
     @testset "one-time evaluation" begin
@@ -561,7 +561,7 @@ end
     end
 
     @testset "reports modifications" begin
-        e = ArgumentError("Invalid value set for field a, expected Integer, got a value of type String (\"foo-bar\")")
+        e = ArgumentError("Invalid value set for field `a`, expected Integer, got a value of type String (\"foo-bar\")")
         @test_throws e FieldErrorV3(; a="foo bar")
     end
 end

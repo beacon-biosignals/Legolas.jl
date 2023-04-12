@@ -485,9 +485,9 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
         if !isnothing(info)
             fcatch = quote
                 if $fname isa $(info.type)
-                    throw(ArgumentError("Invalid value set for field $($fsym) ($(repr($(fname))))"))
+                    throw(ArgumentError("Invalid value set for field `$($fsym)` ($(repr($(fname))))"))
                 else
-                    throw(ArgumentError("Invalid value set for field $($fsym), expected $($(info.type)), got a value of type $(typeof($fname)) ($(repr($(fname))))"))
+                    throw(ArgumentError("Invalid value set for field `$($fsym)`, expected $($(info.type)), got a value of type $(typeof($fname)) ($(repr($(fname))))"))
                 end
             end
             if info.parameterize
@@ -502,7 +502,7 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
                         $fcatch
                     end
                     if !($fname isa $(info.type))
-                        throw(TypeError($(Base.Meta.quot(record_type_symbol)), "field $($fsym)", $(info.type), $fname))
+                        throw(TypeError($(Base.Meta.quot(record_type_symbol)), "field `$($fsym)`", $(info.type), $fname))
                     end
                 end
             else
