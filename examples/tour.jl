@@ -120,7 +120,7 @@ fields = (a=1.0, b="hi", c=π, d=[1, 2, 3])
 #
 # - ...contain the associated schema version's required fields in any order
 # - ...elide required fields, in which case the constructor will assume them to be `missing`
-# - ...contain any other fields in addition to the required fields; such additional fields are simply ignored 
+# - ...contain any other fields in addition to the required fields; such additional fields are simply ignored
 #   by the constructor and are not propagated through to the resulting record.
 #
 # Demonstrating a few of these properties:
@@ -367,7 +367,7 @@ msg = """
 @test_throws ArgumentError(msg) Legolas.read(Arrow.tobuffer(table))
 invalid = [Tables.rowmerge(row; k=string(row.k)) for row in table]
 invalid_but_has_metadata = Arrow.tobuffer(invalid; metadata=("legolas_schema_qualified" => Legolas.identifier(BazV1SchemaVersion()),))
-@test_throws ArgumentError("field `k` has unexpected type; expected <:Int64, found String") Legolas.read(invalid_but_has_metadata)
+@test_throws ArgumentError("Field `k` has unexpected type; expected <:Int64, found String") Legolas.read(invalid_but_has_metadata)
 
 # A note about one additional benefit of `Legolas.read`/`Legolas.write`: Unlike their Arrow.jl counterparts,
 # these functions are relatively agnostic to the types of provided path arguments. Generally, as long as a

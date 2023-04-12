@@ -288,10 +288,10 @@ function _find_violations end
 """
     Legolas.validate(ts::Tables.Schema, sv::Legolas.SchemaVersion)
 
-Throws a descriptive `ArgumentError` if `!isnothing(find_violation(ts, sv))`,
+Throws a descriptive `ArgumentError` if `!isempty(find_violations(ts, sv))`,
 otherwise return `nothing`.
 
-See also: [`Legolas.find_violation`](@ref), [`Legolas.find_violations`](@ref), [`Legolas.complies_with`](@ref)
+See also: [`Legolas.find_violations`](@ref), [`Legolas.find_violation`](@ref), [`Legolas.complies_with`](@ref)
 """
 function validate(ts::Tables.Schema, sv::SchemaVersion)
     results = find_violations(ts, sv)
@@ -311,12 +311,20 @@ function validate(ts::Tables.Schema, sv::SchemaVersion)
     err = ""
     if !isempty(field_err)
         fields = "`" * join(field_err, "`, `") * "`"
-        err *= string("Could not find expected field", length(field_err) > 1 ? "s " : " ",  fields, " in $ts")
+        err *= string("Could not find expected field", length(field_err) > 1 ? "s " : " ", fields, " in $ts")
     end
-    if !isempty(type_err)
-        err *= "Field(s) have unexpected type:\n"
+
+    if !isempty(err) && !isempty(type_err)
+        err *= "\n"
+    end
+    # @info type_err field_err
+    if length(type_err) == 1
+        (field, expected, violation) = only(type_err)
+        err *= "Field `$field` has unexpected type; expected <:$expected, found $violation"
+    elseif length(type_err) > 1
+        err *= "Fields have unexpected type:\n"
         for (field, expected, violation) in type_err
-            err *= "Field `$field` has unexpected type; expected <:$expected, found $violation"
+            err *= "`$field`: expected <:$expected, found $violation"
         end
     end
     throw(ArgumentError(err))
