@@ -254,7 +254,7 @@ accepted_field_type(::SchemaVersion, ::Type{Symbol}) = Union{Symbol,String}
 """
     Legolas.find_violation(ts::Tables.Schema, sv::Legolas.SchemaVersion)
 
-For each required field `f::F` of `sv`:
+Return first schema violation found. For each required field `f::F` of `sv`:
 
 - Define `A = Legolas.accepted_field_type(sv, F)`
 - If `f::T` is present in `ts`, ensure that `T <: A` or else immediately return `f::Symbol => T::DataType`.
@@ -271,7 +271,7 @@ function _find_violation end
 """
     Legolas.find_violations(ts::Tables.Schema, sv::Legolas.SchemaVersion)
 
-Return vector of all violations for required fields `f::F` of `sv`:
+Return vector of all schema violations found. For required fields `f::F` of `sv`:
 
 - Define `A = Legolas.accepted_field_type(sv, F)`
 - If `f::T` is present in `ts`, ensure that `T <: A` or else append `f::Symbol => T::DataType` to output vector.
@@ -315,16 +315,15 @@ function validate(ts::Tables.Schema, sv::SchemaVersion)
     end
 
     if !isempty(err) && !isempty(type_err)
-        err *= "\n"
+        err = "Missing field and unexpected type errors:\n" * err * "\n"
     end
-    # @info type_err field_err
     if length(type_err) == 1
         (field, expected, violation) = only(type_err)
         err *= "Field `$field` has unexpected type; expected <:$expected, found $violation"
     elseif length(type_err) > 1
         err *= "Fields have unexpected type:\n"
         for (field, expected, violation) in type_err
-            err *= "`$field`: expected <:$expected, found $violation"
+            err *= " `$field`: expected <:$expected, found $violation\n"
         end
     end
     throw(ArgumentError(err))
