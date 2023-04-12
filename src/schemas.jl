@@ -477,6 +477,7 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
     names_of_parameterized_fields = Symbol[]
     field_definitions = Expr[]
     field_assignments = Expr[]
+    parametric_field_assignments = Expr[]
     for (fname, ftype) in pairs(record_fields)
         fsym = Base.Meta.quot(fname)
         T = Base.Meta.quot(ftype)
@@ -505,6 +506,14 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
                         throw(TypeError($(Base.Meta.quot(record_type_symbol)), "field `$($fsym)`", $(info.type), $fname))
                     end
                 end
+                fstmt_par = quote
+                    try
+                        $fname = $(info.statement.args[2])
+                        $fname = convert($T, $fname)::$T
+                    catch
+                        $fcatch
+                    end
+                end
             else
                 fstmt = quote
                     try
@@ -514,8 +523,10 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
                         $fcatch
                     end
                 end
+                fstmt_par = fstmt
             end
             push!(field_assignments, fstmt)
+            push!(parametric_field_assignments, fstmt_par)
         end
         push!(field_definitions, fdef)
     end
@@ -551,7 +562,7 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
         inner_constructor_definitions = quote
             function $R{$(type_param_names...)}(; $(field_kwargs...)) where {$(type_param_names...)}
                 $parent_record_application
-                $(field_assignments...)
+                $(parametric_field_assignments...)
                 return new{$(type_param_names...)}($(keys(record_fields)...))
             end
             function $R(; $(field_kwargs...))

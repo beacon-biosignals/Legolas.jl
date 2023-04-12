@@ -412,7 +412,7 @@ end
         @test typeof(ParamV1{Int}(; i=1.0)) === ParamV1{Int}
         @test_throws TypeError ParamV1{Float64}(; i=1)
         @test_throws TypeError ParamV1(; i=1.0)
-        @test_throws InexactError ParamV1{Int}(; i=1.1)
+        @test_throws ArgumentError ParamV1{Int}(; i=1.1)
     end
 end
 
@@ -562,6 +562,25 @@ end
 
         @test length(ex_stack) == 1
         @test sprint(showerror, ex_stack[1].exception) == "TypeError: in FieldErrorV1, in field `d`, expected Union{Missing, Integer}, got a value of type Float64"
+
+        ex_stack = try
+            FieldErrorV1{Missing,Int}(; d=4.5)
+        catch
+            current_exceptions()
+        end
+
+        @test length(ex_stack) == 2
+        @test typeof(ex_stack[1].exception) == InexactError
+        @test sprint(showerror, ex_stack[2].exception) == "ArgumentError: Invalid value set for field `d`, expected Union{Missing, Integer}, got a value of type Float64 (4.5)"
+
+        ex_stack = try
+            FieldErrorV1{AbstractString,Int}
+        catch
+            current_exceptions()
+        end
+
+        @test length(ex_stack) == 1
+        @test contains(sprint(showerror, ex_stack[1].exception), r"TypeError: in FieldErrorV1, in \d+, expected var\"\d+\"<:Union{Missing, String}, got Type{AbstractString}")
     end
 
     @testset "one-time evaluation" begin
