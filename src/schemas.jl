@@ -477,21 +477,60 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
     names_of_parameterized_fields = Symbol[]
     field_definitions = Expr[]
     field_assignments = Expr[]
+    parametric_field_assignments = Expr[]
     for (fname, ftype) in pairs(record_fields)
+        fsym = Base.Meta.quot(fname)
         T = Base.Meta.quot(ftype)
         fdef = :($fname::$T)
         info = get(declared_field_infos, fname, nothing)
         if !isnothing(info)
+            fcatch = quote
+                if $fname isa $(info.type)
+                    throw(ArgumentError("Invalid value set for field `$($fsym)` ($(repr($(fname))))"))
+                else
+                    throw(ArgumentError("Invalid value set for field `$($fsym)`, expected $($(info.type)), got a value of type $(typeof($fname)) ($(repr($(fname))))"))
+                end
+            end
             if info.parameterize
-                T = gensym(string(fname, "_T"))
+                # As we disallow the use of fields which start with an underscore then the
+                # following parameter should not conflict with any user defined fields.
+                # Additionally, as these are static parameters users will not be able to
+                # overwrite them in custom field assignments.
+                T = Symbol('_', join(titlecase.(split(string(fname), '_'))))
                 push!(type_param_defs, :($T <: $(info.type)))
                 push!(names_of_parameterized_fields, fname)
                 fdef = :($fname::$T)
-                fstmt = :($fname = $(info.statement.args[2]))
+                fstmt = quote
+                    try
+                        $fname = $(info.statement.args[2])
+                    catch
+                        $fcatch
+                    end
+                    if !($fname isa $(info.type))
+                        throw(TypeError($(Base.Meta.quot(record_type_symbol)), "field `$($fsym)`", $(info.type), $fname))
+                    end
+                end
+                fstmt_par = quote
+                    try
+                        $fname = $(info.statement.args[2])
+                        $fname = convert($T, $fname)::$T
+                    catch
+                        $fcatch
+                    end
+                end
             else
-                fstmt = :($fname = convert($T, $(info.statement.args[2]))::$T)
+                fstmt = quote
+                    try
+                        $fname = $(info.statement.args[2])
+                        $fname = convert($T, $fname)::$T
+                    catch
+                        $fcatch
+                    end
+                end
+                fstmt_par = fstmt
             end
             push!(field_assignments, fstmt)
+            push!(parametric_field_assignments, fstmt_par)
         end
         push!(field_definitions, fdef)
     end
@@ -527,7 +566,7 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
         inner_constructor_definitions = quote
             function $R{$(type_param_names...)}(; $(field_kwargs...)) where {$(type_param_names...)}
                 $parent_record_application
-                $(field_assignments...)
+                $(parametric_field_assignments...)
                 return new{$(type_param_names...)}($(keys(record_fields)...))
             end
             function $R(; $(field_kwargs...))
@@ -703,7 +742,12 @@ macro version(record_type, required_fields_block)
         end
     end
     if !allunique(f.name for f in required_field_infos)
-        msg = string("cannot have duplicate field names in `@version` declaration; recieved: ", [f.name for f in required_field_infos])
+        msg = string("cannot have duplicate field names in `@version` declaration; received: ", [f.name for f in required_field_infos])
+        return :(throw(SchemaVersionDeclarationError($msg)))
+    end
+    invalid_field_names = filter!(fname -> startswith(string(fname), '_'), [f.name for f in required_field_infos])
+    if !isempty(invalid_field_names)
+        msg = string("cannot have field name which start with an underscore in `@version` declaration: ", invalid_field_names)
         return :(throw(SchemaVersionDeclarationError($msg)))
     end
     declared_field_names_types = Expr(:tuple, (:($(f.name) = $(esc(f.type))) for f in required_field_infos)...)

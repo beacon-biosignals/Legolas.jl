@@ -1,3 +1,4 @@
+using Compat: current_exceptions
 using Legolas, Test, DataFrames, Arrow, UUIDs
 using Legolas: SchemaVersion, @schema, @version, SchemaVersionDeclarationError, RequiredFieldInfo
 
@@ -265,7 +266,8 @@ end
         @test_throws SchemaVersionDeclarationError("provided record type symbol is malformed: ChildVTwo") @version(ChildVTwo > ParentV2, begin x end)
         @test_throws SchemaVersionDeclarationError("provided record type expression is malformed: BobV1 > DaveV1 > JoeV1") @version(BobV1 > DaveV1 > JoeV1, begin x end)
         @test_throws SchemaVersionDeclarationError("provided record type expression is malformed: BobV1 < DaveV1") @version(BobV1 < DaveV1, begin x end)
-        @test_throws SchemaVersionDeclarationError("cannot have duplicate field names in `@version` declaration; recieved: $([:x, :y, :x, :z])") @version(ChildV2, begin x; y; x; z end)
+        @test_throws SchemaVersionDeclarationError("cannot have duplicate field names in `@version` declaration; received: $([:x, :y, :x, :z])") @version(ChildV2, begin x; y; x; z end)
+        @test_throws SchemaVersionDeclarationError("cannot have field name which start with an underscore in `@version` declaration: $([:_X])") @version(ChildV2, begin x; X; _X end)
         @test_throws SchemaVersionDeclarationError("cannot extend from another version of the same schema") @version(ChildV2 > ChildV1, begin x end)
         @test_throws SchemaVersionDeclarationError("declared field types violate parent's field types") @version(NewV1 > ParentV1, begin y::Int end)
         @test_throws SchemaVersionDeclarationError("declared field types violate parent's field types") @version(NewV1 > ChildV1, begin y::Int end)
@@ -411,7 +413,7 @@ end
         @test typeof(ParamV1{Int}(; i=1.0)) === ParamV1{Int}
         @test_throws TypeError ParamV1{Float64}(; i=1)
         @test_throws TypeError ParamV1(; i=1.0)
-        @test_throws InexactError ParamV1{Int}(; i=1.1)
+        @test_throws ArgumentError ParamV1{Int}(; i=1.1)
     end
 end
 
@@ -490,3 +492,114 @@ end
 
 c = ConstrainedFieldV1(field = "1")
 @test c.field == 1
+
+#####
+##### record error reporting
+#####
+
+@schema "test.field-error" FieldError
+
+function _validate(x)
+    x in ("a", "b", "c") || throw(ArgumentError("Must be a, b, or c"))
+    return x
+end
+
+@version FieldErrorV1 begin
+    a::Union{String,Missing} = Legolas.lift(_validate, a)
+    b::(<:Union{String,Missing}) = Legolas.lift(_validate, b)
+    c::Union{Integer,Missing}
+    d::(<:Union{Integer,Missing})
+end
+
+_num_calls = Ref{Int}(0)
+@version FieldErrorV2 begin
+    a::Integer = begin
+        _num_calls[] += 1
+        a isa Function ? a() : a
+    end
+end
+
+@version FieldErrorV3 begin
+    a::Integer = replace(a, ' ' => '-')
+end
+
+@testset "Legolas record constructor error handling" begin
+    @testset "field constructor error" begin
+        ex_stack = try
+            FieldErrorV1(; a="invalid")
+        catch
+            current_exceptions()
+        end
+
+        @test length(ex_stack) == 2
+        @test sprint(showerror, ex_stack[1].exception) == "ArgumentError: Must be a, b, or c"
+        @test sprint(showerror, ex_stack[2].exception) == "ArgumentError: Invalid value set for field `a` (\"invalid\")"
+
+        ex_stack = try
+            FieldErrorV1(; b="invalid")
+        catch
+            current_exceptions()
+        end
+
+        @test length(ex_stack) == 2
+        @test sprint(showerror, ex_stack[1].exception) == "ArgumentError: Must be a, b, or c"
+        @test sprint(showerror, ex_stack[2].exception) == "ArgumentError: Invalid value set for field `b` (\"invalid\")"
+
+        ex_stack = try
+            FieldErrorV1(; c="3")
+        catch
+            current_exceptions()
+        end
+
+        @test length(ex_stack) == 2
+        @test startswith(sprint(showerror, ex_stack[1].exception), "MethodError: Cannot `convert` an object of type String to an object of type Integer")
+        @test sprint(showerror, ex_stack[2].exception) == "ArgumentError: Invalid value set for field `c`, expected Union{Missing, Integer}, got a value of type String (\"3\")"
+
+        ex_stack = try
+            FieldErrorV1(; d=4.0)
+        catch
+            current_exceptions()
+        end
+
+        @test length(ex_stack) == 1
+        @test sprint(showerror, ex_stack[1].exception) == "TypeError: in FieldErrorV1, in field `d`, expected Union{Missing, Integer}, got a value of type Float64"
+
+        ex_stack = try
+            FieldErrorV1{Missing,Int}(; d=4.5)
+        catch
+            current_exceptions()
+        end
+
+        @test length(ex_stack) == 2
+        @test typeof(ex_stack[1].exception) == InexactError
+        @test sprint(showerror, ex_stack[2].exception) == "ArgumentError: Invalid value set for field `d`, expected Union{Missing, Integer}, got a value of type Float64 (4.5)"
+
+        ex_stack = try
+            FieldErrorV1{AbstractString,Int}
+        catch
+            current_exceptions()
+        end
+
+        @test length(ex_stack) == 1
+        @test contains(sprint(showerror, ex_stack[1].exception), r"TypeError: in FieldErrorV1, in _B, expected _B<:Union{Missing, String}, got Type{AbstractString}")
+    end
+
+    @testset "one-time evaluation" begin
+        _num_calls[] = 0
+        FieldErrorV2(; a=1.0)
+        @test _num_calls[] == 1
+
+        _num_calls[] = 0
+        @test_throws ArgumentError FieldErrorV2(; a=() -> error("foo"))
+        @test _num_calls[] == 1
+
+        _num_calls[] = 0
+        @test_throws ArgumentError FieldErrorV2(; a="a")
+        @test _num_calls[] == 1
+    end
+
+    @testset "reports modifications" begin
+        e = ArgumentError("Invalid value set for field `a`, expected Integer, got a value of type String (\"foo-bar\")")
+        @test_throws e FieldErrorV3(; a="foo bar")
+    end
+end
