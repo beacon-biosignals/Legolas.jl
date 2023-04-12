@@ -267,6 +267,7 @@ end
         @test_throws SchemaVersionDeclarationError("provided record type expression is malformed: BobV1 > DaveV1 > JoeV1") @version(BobV1 > DaveV1 > JoeV1, begin x end)
         @test_throws SchemaVersionDeclarationError("provided record type expression is malformed: BobV1 < DaveV1") @version(BobV1 < DaveV1, begin x end)
         @test_throws SchemaVersionDeclarationError("cannot have duplicate field names in `@version` declaration; received: $([:x, :y, :x, :z])") @version(ChildV2, begin x; y; x; z end)
+        @test_throws SchemaVersionDeclarationError("cannot have field name which start with an underscore in `@version` declaration: $([:_X])") @version(ChildV2, begin x; X; _X end)
         @test_throws SchemaVersionDeclarationError("cannot extend from another version of the same schema") @version(ChildV2 > ChildV1, begin x end)
         @test_throws SchemaVersionDeclarationError("declared field types violate parent's field types") @version(NewV1 > ParentV1, begin y::Int end)
         @test_throws SchemaVersionDeclarationError("declared field types violate parent's field types") @version(NewV1 > ChildV1, begin y::Int end)
@@ -580,7 +581,7 @@ end
         end
 
         @test length(ex_stack) == 1
-        @test contains(sprint(showerror, ex_stack[1].exception), r"TypeError: in FieldErrorV1, in \d+, expected var\"\d+\"<:Union{Missing, String}, got Type{AbstractString}")
+        @test contains(sprint(showerror, ex_stack[1].exception), r"TypeError: in FieldErrorV1, in _B, expected _B<:Union{Missing, String}, got Type{AbstractString}")
     end
 
     @testset "one-time evaluation" begin

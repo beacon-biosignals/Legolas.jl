@@ -492,7 +492,11 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
                 end
             end
             if info.parameterize
-                T = gensym(string(fname, "_T"))
+                # As we disallow the use of fields which start with an underscore then the
+                # following parameter should not conflict with any user defined fields.
+                # Additionally, as these are static parameters users will not be able to
+                # overwrite them in custom field assignments.
+                T = Symbol('_', join(titlecase.(split(string(fname), '_'))))
                 push!(type_param_defs, :($T <: $(info.type)))
                 push!(names_of_parameterized_fields, fname)
                 fdef = :($fname::$T)
@@ -739,6 +743,11 @@ macro version(record_type, required_fields_block)
     end
     if !allunique(f.name for f in required_field_infos)
         msg = string("cannot have duplicate field names in `@version` declaration; received: ", [f.name for f in required_field_infos])
+        return :(throw(SchemaVersionDeclarationError($msg)))
+    end
+    invalid_field_names = filter!(fname -> startswith(string(fname), '_'), [f.name for f in required_field_infos])
+    if !isempty(invalid_field_names)
+        msg = string("cannot have field name which start with an underscore in `@version` declaration: ", invalid_field_names)
         return :(throw(SchemaVersionDeclarationError($msg)))
     end
     declared_field_names_types = Expr(:tuple, (:($(f.name) = $(esc(f.type))) for f in required_field_infos)...)
