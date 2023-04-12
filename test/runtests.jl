@@ -322,6 +322,7 @@ end
             @test isequal(Legolas.find_violations(t, s), [:x => missing])
         end
 
+        # Multiple expected field violations
         t = Tables.Schema((:a, :z), (Int32, Any))
         for s in (GrandchildV1SchemaVersion(), ChildV1SchemaVersion(), ParentV1SchemaVersion())
             @test_throws ArgumentError("Could not find expected fields `x`, `y` in $t") Legolas.validate(t, s)
