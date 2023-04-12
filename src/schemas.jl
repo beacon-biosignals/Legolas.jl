@@ -254,7 +254,7 @@ accepted_field_type(::SchemaVersion, ::Type{Symbol}) = Union{Symbol,String}
 """
     Legolas.find_violation(ts::Tables.Schema, sv::Legolas.SchemaVersion)
 
-Return first schema violation found. For each required field `f::F` of `sv`:
+Return first schema violation. For each required field `f::F` of `sv`:
 
 - Define `A = Legolas.accepted_field_type(sv, F)`
 - If `f::T` is present in `ts`, ensure that `T <: A` or else immediately return `f::Symbol => T::DataType`.
@@ -271,7 +271,7 @@ function _find_violation end
 """
     Legolas.find_violations(ts::Tables.Schema, sv::Legolas.SchemaVersion)
 
-Return vector of all schema violations found. For required fields `f::F` of `sv`:
+Return vector of all schema violations. For required fields `f::F` of `sv`:
 
 - Define `A = Legolas.accepted_field_type(sv, F)`
 - If `f::T` is present in `ts`, ensure that `T <: A` or else append `f::Symbol => T::DataType` to output vector.
