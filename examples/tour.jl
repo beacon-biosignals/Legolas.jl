@@ -133,11 +133,11 @@ fields_with_x = (; fields..., x="x")
 foo = FooV1(; a=1.0, b="hi", d=[1, 2, 3])
 @test isequal(NamedTuple(foo), (a=1.0, b="hi", c=missing, d=[1, 2, 3]))
 
-# Providing the non-compliantly-typed field `d::Int`, inducing a `MethodError`:
-@test_throws MethodError FooV1(; a=1.0, b="hi", d=2)
+# Providing the non-compliantly-typed field `d::Int`, inducing an `ArgumentError`:
+@test_throws ArgumentError FooV1(; a=1.0, b="hi", d=2)
 
-# Implicitly providing the non-compliantly-typed field `d::Missing`, inducing a `MethodError`:
-@test_throws MethodError FooV1(; a=1.0, b="hi")
+# Implicitly providing the non-compliantly-typed field `d::Missing`, inducing an `ArgumentError`:
+@test_throws ArgumentError FooV1(; a=1.0, b="hi")
 
 #####
 ##### Custom Field Assignments
@@ -243,7 +243,7 @@ end
 # assignments before applying the child's field assignments. Notice how `BazV1` applies the
 # constraints/transformations of both `example.baz@1` and `example.bar@1`:
 @test NamedTuple(BazV1(; x=200, y=:hi)) == (x=127, y="hi", z="hi_127", k=6)
-@test_throws MethodError BazV1(; y=:hi) # `example.baz@1` does not allow `x::Missing`
+@test_throws ArgumentError BazV1(; y=:hi) # `example.baz@1` does not allow `x::Missing`
 
 # `BazV1`'s inner constructor definition is roughly equivalent to:
 #
