@@ -738,7 +738,7 @@ macro version(record_type, required_fields_block)
         end
     end
     if !allunique(f.name for f in required_field_infos)
-        msg = string("cannot have duplicate field names in `@version` declaration; recieved: ", [f.name for f in required_field_infos])
+        msg = string("cannot have duplicate field names in `@version` declaration; received: ", [f.name for f in required_field_infos])
         return :(throw(SchemaVersionDeclarationError($msg)))
     end
     declared_field_names_types = Expr(:tuple, (:($(f.name) = $(esc(f.type))) for f in required_field_infos)...)
