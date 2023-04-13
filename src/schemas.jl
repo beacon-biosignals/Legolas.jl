@@ -300,7 +300,7 @@ function validate(ts::Tables.Schema, sv::SchemaVersion)
     err = ""
     if !isempty(field_err)
         fields = "`" * join(field_err, "`, `") * "`"
-        err *= string("Could not find expected field", length(field_err) > 1 ? "s " : " ", fields, " in $ts")
+        err *= string("Could not find expected field(s)",  fields, " in $ts")
     end
 
     if !isempty(err) && !isempty(type_err)
