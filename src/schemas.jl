@@ -315,7 +315,7 @@ function validate(ts::Tables.Schema, sv::SchemaVersion)
     end
 
     if !isempty(err) && !isempty(type_err)
-        err = "Missing field and unexpected type errors:\n" * err * "\n"
+        err = "Missing field(s) and unexpected type(s):\n" * err * "\n"
     end
     if length(type_err) == 1
         (field, expected, violation) = only(type_err)

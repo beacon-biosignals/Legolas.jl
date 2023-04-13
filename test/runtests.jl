@@ -343,7 +343,7 @@ end
         t = Tables.Schema((:x, :a), (ComplexF64, ComplexF64))
         let s = GrandchildV1SchemaVersion()
             msg = """
-            Missing field and unexpected type errors:
+            Missing field(s) and unexpected type(s):
             Could not find expected field `y` in Tables.Schema:
              :x  ComplexF64 (alias for Complex{Float64})
              :a  ComplexF64 (alias for Complex{Float64})
