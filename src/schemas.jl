@@ -286,8 +286,7 @@ find_violations(::Tables.Schema, sv::SchemaVersion) = throw(UnknownSchemaVersion
 """
     Legolas.validate(ts::Tables.Schema, sv::Legolas.SchemaVersion)
 
-Throws a descriptive `ArgumentError` if `!isempty(find_violations(ts, sv))`,
-otherwise return `nothing`.
+Throws a descriptive `ArgumentError` if any violations are found.
 
 See also: [`Legolas.find_violations`](@ref), [`Legolas.find_violation`](@ref), [`Legolas.complies_with`](@ref)
 """
