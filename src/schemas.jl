@@ -297,25 +297,14 @@ function validate(ts::Tables.Schema, sv::SchemaVersion)
             push!(type_err, (field, expected, violation))
         end
     end
-    err = ""
-    if !isempty(field_err)
-        fields = "`" * join(field_err, "`, `") * "`"
-        err *= string("Could not find expected field(s)",  fields, " in $ts")
+    err_msg = "Schema violation(s) found for $ts\n"
+    for err in field_err
+        err_msg *= " - Could not find expected field: $err\n"
     end
-
-    if !isempty(err) && !isempty(type_err)
-        err = "Missing field(s) and unexpected type(s):\n" * err * "\n"
+    for (field, expected, violation) in type_err
+        err_msg *= " - Incorrect type: `$field` expected `<:$expected`, found $violation\n"
     end
-    if length(type_err) == 1
-        (field, expected, violation) = only(type_err)
-        err *= "Field `$field` has unexpected type; expected <:$expected, found $violation"
-    elseif length(type_err) > 1
-        err *= "Fields have unexpected type:\n"
-        for (field, expected, violation) in type_err
-            err *= " `$field`: expected <:$expected, found $violation\n"
-        end
-    end
-    throw(ArgumentError(err))
+    throw(ArgumentError(err_msg))
 end
 
 """

@@ -367,7 +367,15 @@ msg = """
 @test_throws ArgumentError(msg) Legolas.read(Arrow.tobuffer(table))
 invalid = [Tables.rowmerge(row; k=string(row.k)) for row in table]
 invalid_but_has_metadata = Arrow.tobuffer(invalid; metadata=("legolas_schema_qualified" => Legolas.identifier(BazV1SchemaVersion()),))
-@test_throws ArgumentError("Field `k` has unexpected type; expected <:Int64, found String") Legolas.read(invalid_but_has_metadata)
+msg2 = """
+      Schema violation(s) found for Tables.Schema:
+       :x  Int8
+       :y  String
+       :z  String
+       :k  String
+       - Incorrect type: `k` expected `<:Int64`, found String
+      """
+@test_throws ArgumentError(msg2) Legolas.read(invalid_but_has_metadata)
 
 # A note about one additional benefit of `Legolas.read`/`Legolas.write`: Unlike their Arrow.jl counterparts,
 # these functions are relatively agnostic to the types of provided path arguments. Generally, as long as a

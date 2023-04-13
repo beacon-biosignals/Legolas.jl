@@ -316,7 +316,14 @@ end
 
         t = Tables.Schema((:a, :y, :z), (Int32, String, Any))
         for s in (GrandchildV1SchemaVersion(), ChildV1SchemaVersion(), ParentV1SchemaVersion())
-            @test_throws ArgumentError("Could not find expected field(s) `x` in $t") Legolas.validate(t, s)
+            msg = """
+                  Schema violation(s) found for Tables.Schema:
+                   :a  Int32
+                   :y  String
+                   :z  Any
+                   - Could not find expected field: x
+                  """
+            @test_throws ArgumentError(msg) Legolas.validate(t, s)
             @test !Legolas.complies_with(t, s)
             @test isequal(Legolas.find_violation(t, s), :x => missing)
             @test isequal(Legolas.find_violations(t, s), [:x => missing])
@@ -325,7 +332,14 @@ end
         # Multiple expected field violations
         t = Tables.Schema((:a, :z), (Int32, Any))
         for s in (GrandchildV1SchemaVersion(), ChildV1SchemaVersion(), ParentV1SchemaVersion())
-            @test_throws ArgumentError("Could not find expected field(s) `x`, `y` in $t") Legolas.validate(t, s)
+            msg = """
+                  Schema violation(s) found for Tables.Schema:
+                   :a  Int32
+                   :z  Any
+                   - Could not find expected field: x
+                   - Could not find expected field: y
+                  """
+            @test_throws ArgumentError(msg) Legolas.validate(t, s)
             @test !Legolas.complies_with(t, s)
             @test isequal(Legolas.find_violation(t, s), :x => missing)
             @test isequal(Legolas.find_violations(t, s), [:x => missing, :y => missing])
@@ -333,7 +347,15 @@ end
 
         t = Tables.Schema((:x, :a, :y), (ComplexF64, Int32, String))
         for s in (GrandchildV1SchemaVersion(), ChildV1SchemaVersion(), ParentV1SchemaVersion())
-            @test_throws ArgumentError("Field `x` has unexpected type; expected <:$(Vector), found $(Complex{Float64})") Legolas.validate(t, s)
+            msg = """
+                  Schema violation(s) found for Tables.Schema:
+                   :x  ComplexF64
+                   :y  String
+                   :z  String
+                   :k  String
+                   - Incorrect type: `k` expected `<:Vector`, found ComplexF64
+                  """
+            @test_throws ArgumentError(msg) Legolas.validate(t, s)
             @test !Legolas.complies_with(t, s)
             @test isequal(Legolas.find_violation(t, s), :x => ComplexF64)
             @test isequal(Legolas.find_violations(t, s), [:x => ComplexF64])
@@ -343,13 +365,12 @@ end
         t = Tables.Schema((:y, :a), (ComplexF64, ComplexF64))
         let s = GrandchildV1SchemaVersion()
             msg = """
-            Missing field(s) and unexpected type(s):
-            Could not find expected field(s) `x` in Tables.Schema:
-             :y  ComplexF64 (alias for Complex{Float64})
-             :a  ComplexF64 (alias for Complex{Float64})
-            Fields have unexpected type:
-             `y`: expected <:String, found ComplexF64
-             `a`: expected <:Int32, found ComplexF64
+            Schema violation(s) found for Tables.Schema:
+             :x  Int8
+             :y  String
+             :z  String
+             :k  String
+             - Incorrect type: `k` expected `<:Int64`, found String
             """
             @test_throws ArgumentError(msg) Legolas.validate(t, s)
             @test !Legolas.complies_with(t, s)
