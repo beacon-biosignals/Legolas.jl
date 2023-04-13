@@ -283,8 +283,6 @@ See also: [`Legolas.find_violation`](@ref), [`Legolas.validate`](@ref), [`Legola
 """
 find_violations(::Tables.Schema, sv::SchemaVersion) = throw(UnknownSchemaVersionError(sv))
 
-function _find_violations end
-
 """
     Legolas.validate(ts::Tables.Schema, sv::Legolas.SchemaVersion)
 
