@@ -462,38 +462,38 @@ function _generate_schema_version_definitions(schema_version::SchemaVersion, par
 end
 
 function _generate_validation_definitions(schema_version::SchemaVersion)
-    field_violation_check_statements = Expr[]
-    for (fname, ftype) in pairs(required_fields(schema_version))
-        fname = Base.Meta.quot(fname)
-        push!(field_violation_check_statements, quote
-            S = $Legolas.accepted_field_type(sv, $ftype)
-            result = $Legolas._check_for_expected_field(ts, $fname, S)
-            isnothing(result) || return $fname => result
+    # When `fail_fast == true`, return first violation found rather than all violations
+    _violation_check = (; fail_fast::Bool) -> begin
+        violations = Expr[]
+        myvector = gensym()
+        push!(violations, :($myvector = Any[]))
+        for (fname, ftype) in pairs(required_fields(schema_version))
+            fname = Base.Meta.quot(fname)
+            push!(violations, quote
+                S = $Legolas.accepted_field_type(sv, $ftype)
+                result = $Legolas._check_for_expected_field(ts, $fname, S)
+                if !isnothing(result) && $(fail_fast)
+                    return $fname => result
+                elseif !isnothing(result)
+                    push!($myvector, ($fname => result))
+                end
+            end)
+        end
+        push!(violations, quote
+            return $(fail_fast) ? nothing : $myvector
         end)
+        return violations
     end
-
-    multifield_violation_check = Expr[] # the function body
-    myvector = gensym()
-    push!(multifield_violation_check, :($myvector = Any[]))
-    for (fname, ftype) in pairs(required_fields(schema_version))
-        fname = Base.Meta.quot(fname)
-        push!(multifield_violation_check, quote
-            S = $Legolas.accepted_field_type(sv, $ftype)
-            result = $Legolas._check_for_expected_field(ts, $fname, S)
-            isnothing(result) || push!($myvector, ($fname => result))
-        end)
-    end
-    push!(multifield_violation_check, :(return $myvector))
 
     return quote
         function $(Legolas).find_violation(ts::$(Tables).Schema, sv::$(Base.Meta.quot(typeof(schema_version))))
-            $(field_violation_check_statements...)
+            $(_violation_check(; fail_fast=true)...)
             return nothing
         end
 
         # Multiple violation reporting
         function $(Legolas).find_violations(ts::$(Tables).Schema, sv::$(Base.Meta.quot(typeof(schema_version))))
-            $(multifield_violation_check...)
+            $(_violation_check(; fail_fast=false)...)
             return nothing
         end
     end
