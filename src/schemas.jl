@@ -286,8 +286,8 @@ function validate(ts::Tables.Schema, sv::SchemaVersion)
     results = find_violations(ts, sv)
     isempty(results) && return nothing
 
-    field_err = Any[]
-    type_err = Any[]
+    field_err = Symbol[]
+    type_err = Tuple{Symbol,Type,Type}[]
     for result in results
         field, violation = result
         if ismissing(violation)
@@ -299,7 +299,7 @@ function validate(ts::Tables.Schema, sv::SchemaVersion)
     end
     err_msg = "Schema violation(s) found for $ts\n"
     for err in field_err
-        err_msg *= " - Could not find expected field: `$err`\n"
+        err_msg *= " - Could not find required field: `$err`\n"
     end
     for (field, expected, violation) in type_err
         err_msg *= " - Incorrect type: `$field` expected `<:$expected`, found $violation\n"
