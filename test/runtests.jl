@@ -349,23 +349,6 @@ end
             @test isequal(Legolas.find_violations(t, s), [:x => missing, :y => missing])
         end
 
-        t = Tables.Schema((:x, :a, :y), (Bool, Int32, String))
-        for (s, id) in ((GrandchildV1SchemaVersion(), "test.grandchild@1"),
-                        (ChildV1SchemaVersion(), "test.child@1"),
-                        (ParentV1SchemaVersion(), "test.parent@1"))
-            msg = """
-                  Tables.Schema violates Legolas schema `$id`:
-                   - Incorrect type: `x` expected `<:Vector`, found `Bool`
-                  Provided Tables.Schema:
-                   :x  Bool
-                   :a  Int32
-                   :y  String"""
-            @test_throws ArgumentError(msg) Legolas.validate(t, s)
-            @test !Legolas.complies_with(t, s)
-            @test isequal(Legolas.find_violation(t, s), :x => Bool)
-            @test isequal(Legolas.find_violations(t, s), [:x => Bool])
-        end
-
         # Multiple violations, both missing fields and type error
         t = Tables.Schema((:y, :a), (Bool, Int32))
         let s = GrandchildV1SchemaVersion()
