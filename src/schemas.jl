@@ -311,9 +311,9 @@ end
 """
     Legolas.complies_with(ts::Tables.Schema, sv::Legolas.SchemaVersion)
 
-Return `isnothing(find_violation(ts, sv))`.
+Return `isnothing(find_violations(ts, sv))`.
 
-See also: [`Legolas.find_violation`](@ref), [`Legolas.validate`](@ref)
+See also: [`Legolas.find_violations`](@ref), [`Legolas.validate`](@ref)
 """
 complies_with(ts::Tables.Schema, sv::SchemaVersion) = isnothing(find_violations(ts, sv))
 
