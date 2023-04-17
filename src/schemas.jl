@@ -267,7 +267,7 @@ function find_violation(ts::Tables.Schema, sv::SchemaVersion)
         "isempty(v) ? nothing : v; end` instead.",
         :find_violation,
     )
-    violations = find_violations(ts, sv; fail_fast=true)
+    violations = find_violations(ts, sv)
     return isempty(violations) ? nothing : first(violations)
 end
 
@@ -282,7 +282,7 @@ the expected type `T`, reported as `f::Symbol => T::DataType`.
 
 See also: [`Legolas.validate`](@ref), [`Legolas.complies_with`](@ref)
 """
-function find_violations(::Tables.Schema, sv::SchemaVersion; fail_fast::Bool=false)
+function find_violations(::Tables.Schema, sv::SchemaVersion)
     throw(UnknownSchemaVersionError(sv))
 end
 
@@ -474,17 +474,15 @@ function _generate_schema_version_definitions(schema_version::SchemaVersion, par
 end
 
 function _generate_validation_definitions(schema_version::SchemaVersion)
-    # When `fail_fast == true`, return first violation found rather than all violations
     SV = Base.Meta.quot(typeof(schema_version))
     return quote
-        function Legolas.find_violations(ts::$(Tables).Schema, sv::$SV; fail_fast::Bool=false)
+        function Legolas.find_violations(ts::$(Tables).Schema, sv::$SV)
             violations = Pair{Symbol,Union{Type,Missing}}[]
             for (fname, ftype) in pairs(Legolas.required_fields(sv))
                 S = Legolas.accepted_field_type(sv, ftype)
                 result = Legolas._check_for_expected_field(ts, fname, S)
                 if !isnothing(result)
                     push!(violations, fname => result)
-                    fail_fast && break
                 end
             end
             return violations
