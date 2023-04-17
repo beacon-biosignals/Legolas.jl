@@ -315,14 +315,16 @@ end
         # functions work as expected w.r.t. schema extension in particular.
 
         t = Tables.Schema((:a, :y, :z), (Int32, String, Any))
-        for s in (GrandchildV1SchemaVersion(), ChildV1SchemaVersion(), ParentV1SchemaVersion())
+        for (s, id) in ((GrandchildV1SchemaVersion(), "test.grandchild@1"),
+                        (ChildV1SchemaVersion(), "test.child@1"),
+                        (ParentV1SchemaVersion(), "test.parent@1"))
             msg = """
-                  Schema violation(s) found for Tables.Schema:
+                  Tables.Schema violates Legolas schema `$id`:
+                    - Could not find required field: `x`
+                  Provided Tables.Schema:
                    :a  Int32
                    :y  String
-                   :z  Any
-                   - Could not find expected field: `x`
-                  """
+                   :z  Any"""
             @test_throws ArgumentError(msg) Legolas.validate(t, s)
             @test !Legolas.complies_with(t, s)
             @test isequal(Legolas.find_violation(t, s), :x => missing)
@@ -331,14 +333,16 @@ end
 
         # Multiple missing field violations
         t = Tables.Schema((:a, :z), (Int32, Any))
-        for s in (GrandchildV1SchemaVersion(), ChildV1SchemaVersion(), ParentV1SchemaVersion())
+        for (s, id) in ((GrandchildV1SchemaVersion(), "test.grandchild@1"),
+                        (ChildV1SchemaVersion(), "test.child@1"),
+                        (ParentV1SchemaVersion(), "test.parent@1"))
             msg = """
-                  Schema violation(s) found for Tables.Schema:
+                  Tables.Schema violates Legolas schema `$id`:
+                    - Could not find required field: `x`
+                    - Could not find required field: `y`
+                  Provided Tables.Schema:
                    :a  Int32
-                   :z  Any
-                   - Could not find expected field: `x`
-                   - Could not find expected field: `y`
-                  """
+                   :z  Any"""
             @test_throws ArgumentError(msg) Legolas.validate(t, s)
             @test !Legolas.complies_with(t, s)
             @test isequal(Legolas.find_violation(t, s), :x => missing)
@@ -346,14 +350,16 @@ end
         end
 
         t = Tables.Schema((:x, :a, :y), (Bool, Int32, String))
-        for s in (GrandchildV1SchemaVersion(), ChildV1SchemaVersion(), ParentV1SchemaVersion())
+        for (s, id) in ((GrandchildV1SchemaVersion(), "test.grandchild@1"),
+                        (ChildV1SchemaVersion(), "test.child@1"),
+                        (ParentV1SchemaVersion(), "test.parent@1"))
             msg = """
-                  Schema violation(s) found for Tables.Schema:
+                  Tables.Schema violates Legolas schema `$id`:
+                    - Incorrect type: `x` expected `<:Vector`, found `Bool`
+                  Provided Tables.Schema:
                    :x  Bool
                    :a  Int32
-                   :y  String
-                   - Incorrect type: `x` expected `<:Vector`, found Bool
-                  """
+                   :y  String"""
             @test_throws ArgumentError(msg) Legolas.validate(t, s)
             @test !Legolas.complies_with(t, s)
             @test isequal(Legolas.find_violation(t, s), :x => Bool)
@@ -364,12 +370,12 @@ end
         t = Tables.Schema((:y, :a), (Bool, Int32))
         let s = GrandchildV1SchemaVersion()
             msg = """
-            Schema violation(s) found for Tables.Schema:
+            Tables.Schema violates Legolas schema `test.grandchild@1`:
+              - Could not find required field: `x`
+              - Incorrect type: `y` expected `<:String`, found `Bool`
+            Provided Tables.Schema:
              :y  Bool
-             :a  Int32
-             - Could not find expected field: `x`
-             - Incorrect type: `y` expected `<:String`, found Bool
-            """
+             :a  Int32"""
             @test_throws ArgumentError(msg) Legolas.validate(t, s)
             @test !Legolas.complies_with(t, s)
             @test isequal(Legolas.find_violation(t, s), :x => missing)

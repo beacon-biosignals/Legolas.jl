@@ -297,13 +297,14 @@ function validate(ts::Tables.Schema, sv::SchemaVersion)
             push!(type_err, (field, expected, violation))
         end
     end
-    err_msg = "Schema violation(s) found for $ts\n"
+    err_msg = "Tables.Schema violates Legolas schema `$(string(name(sv), "@", version(sv)))`:\n"
     for err in field_err
-        err_msg *= " - Could not find required field: `$err`\n"
+        err_msg *= "  - Could not find required field: `$err`\n"
     end
     for (field, expected, violation) in type_err
-        err_msg *= " - Incorrect type: `$field` expected `<:$expected`, found $violation\n"
+        err_msg *= "  - Incorrect type: `$field` expected `<:$expected`, found `$violation`\n"
     end
+    err_msg *= "Provided $ts"
     throw(ArgumentError(err_msg))
 end
 

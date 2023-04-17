@@ -368,13 +368,13 @@ msg = """
 invalid = [Tables.rowmerge(row; k=string(row.k)) for row in table]
 invalid_but_has_metadata = Arrow.tobuffer(invalid; metadata=("legolas_schema_qualified" => Legolas.identifier(BazV1SchemaVersion()),))
 msg2 = """
-      Schema violation(s) found for Tables.Schema:
+      Tables.Schema violates Legolas schema `example.baz@1`:
+        - Incorrect type: `k` expected `<:Int64`, found `String`
+      Provided Tables.Schema:
        :x  Int8
        :y  String
        :z  String
-       :k  String
-       - Incorrect type: `k` expected `<:Int64`, found String
-      """
+       :k  String"""
 @test_throws ArgumentError(msg2) Legolas.read(invalid_but_has_metadata)
 
 # A note about one additional benefit of `Legolas.read`/`Legolas.write`: Unlike their Arrow.jl counterparts,
