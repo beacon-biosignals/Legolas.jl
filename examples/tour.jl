@@ -5,7 +5,7 @@
 
 using Legolas, Arrow, Tables, Test, UUIDs
 
-using Legolas: @schema, @version, complies_with, find_violation, validate
+using Legolas: @schema, @version, complies_with, find_violations, validate
 
 #####
 ##### Introduction
@@ -58,7 +58,7 @@ end
 ##### `Tables.Schema` Compliance/Validation
 #####
 
-# We can use `complies_with`, `validate`, and `find_violation` to check whether a given
+# We can use `complies_with`, `validate`, and `find_violations` to check whether a given
 # `Tables.Schema` (ref https://tables.juliadata.org/stable/#Tables.Schema) complies with
 # `example.foo@1`.
 
@@ -71,13 +71,13 @@ for s in [Tables.Schema((:a, :b, :c, :d), (Real, String, Any, AbstractVector)), 
     # if `complies_with` finds a violation, it returns `false`; returns `true` otherwise
     @test complies_with(s, FooV1SchemaVersion())
 
-    # if `validate` finds a violation, it throws an error indicating the violation;
+    # if `validate` finds any violations, it throws an error indicating the violations;
     # returns `nothing` otherwise
     @test validate(s, FooV1SchemaVersion()) isa Nothing
 
-    # if `find_violation` finds a violation, it returns a tuple indicating the relevant
-    # field and its violation; returns `nothing` otherwise
-    @test isnothing(find_violation(s, FooV1SchemaVersion()))
+    # if `find_violations` finds any violations, it returns a vector of tuples indicating the relevant
+    # fields and their violations; returns `nothing` otherwise
+    @test isnothing(find_violations(s, FooV1SchemaVersion()))
 end
 
 # ...while the below `Tables.Schema`s do not:
@@ -85,12 +85,12 @@ end
 s = Tables.Schema((:a, :c, :d), (Int, Float64, Vector)) # The required non-`>:Missing` field `b::String` is not present.
 @test !complies_with(s, FooV1SchemaVersion())
 @test_throws ArgumentError validate(s, FooV1SchemaVersion())
-@test isequal(find_violation(s, FooV1SchemaVersion()), :b => missing)
+@test isequal(find_violations(s, FooV1SchemaVersion()), [:b => missing])
 
 s = Tables.Schema((:a, :b, :c, :d), (Int, String, Float64, Any)) # The type of required field `d::AbstractVector` is not `<:AbstractVector`.
 @test !complies_with(s, FooV1SchemaVersion())
 @test_throws ArgumentError validate(s, FooV1SchemaVersion())
-@test isequal(find_violation(s, FooV1SchemaVersion()), :d => Any)
+@test isequal(find_violations(s, FooV1SchemaVersion()), [:d => Any])
 
 # The expectations that characterize Legolas' particular notion of "schematic compliance" - requiring the
 # presence of pre-specified declared fields, assuming non-present fields to be implicitly `missing`, and allowing

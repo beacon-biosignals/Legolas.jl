@@ -284,7 +284,7 @@ See also: [`Legolas.find_violations`](@ref), [`Legolas.find_violation`](@ref), [
 """
 function validate(ts::Tables.Schema, sv::SchemaVersion)
     results = find_violations(ts, sv)
-    isempty(results) && return nothing
+    isnothing(results) && return nothing
 
     field_err = Symbol[]
     type_err = Tuple{Symbol,Type,Type}[]
@@ -315,7 +315,7 @@ Return `isnothing(find_violation(ts, sv))`.
 
 See also: [`Legolas.find_violation`](@ref), [`Legolas.validate`](@ref)
 """
-complies_with(ts::Tables.Schema, sv::SchemaVersion) = isnothing(find_violation(ts, sv))
+complies_with(ts::Tables.Schema, sv::SchemaVersion) = isnothing(find_violations(ts, sv))
 
 #####
 ##### `AbstractRecord`
@@ -481,13 +481,18 @@ function _generate_validation_definitions(schema_version::SchemaVersion)
             end)
         end
         push!(violations, quote
-            return $(fail_fast) ? nothing : $myvector
+            return length($myvector) > 0 ? $myvector : nothing
         end)
         return violations
     end
 
     return quote
         function $(Legolas).find_violation(ts::$(Tables).Schema, sv::$(Base.Meta.quot(typeof(schema_version))))
+            Base.depwarn(
+                "The `find_violation` function will be deprecated in a future release. " *
+                "Please use `find_violations(args...)` instead of `find_violation(args...)`.",
+                :find_violation,
+            )
             $(_violation_check(; fail_fast=true)...)
         end
 
