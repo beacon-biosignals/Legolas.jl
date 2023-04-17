@@ -320,7 +320,7 @@ end
                         (ParentV1SchemaVersion(), "test.parent@1"))
             msg = """
                   Tables.Schema violates Legolas schema `$id`:
-                    - Could not find required field: `x`
+                   - Could not find required field: `x`
                   Provided Tables.Schema:
                    :a  Int32
                    :y  String
@@ -338,8 +338,8 @@ end
                         (ParentV1SchemaVersion(), "test.parent@1"))
             msg = """
                   Tables.Schema violates Legolas schema `$id`:
-                    - Could not find required field: `x`
-                    - Could not find required field: `y`
+                   - Could not find required field: `x`
+                   - Could not find required field: `y`
                   Provided Tables.Schema:
                    :a  Int32
                    :z  Any"""
@@ -355,7 +355,7 @@ end
                         (ParentV1SchemaVersion(), "test.parent@1"))
             msg = """
                   Tables.Schema violates Legolas schema `$id`:
-                    - Incorrect type: `x` expected `<:Vector`, found `Bool`
+                   - Incorrect type: `x` expected `<:Vector`, found `Bool`
                   Provided Tables.Schema:
                    :x  Bool
                    :a  Int32
@@ -371,8 +371,8 @@ end
         let s = GrandchildV1SchemaVersion()
             msg = """
             Tables.Schema violates Legolas schema `test.grandchild@1`:
-              - Could not find required field: `x`
-              - Incorrect type: `y` expected `<:String`, found `Bool`
+             - Could not find required field: `x`
+             - Incorrect type: `y` expected `<:String`, found `Bool`
             Provided Tables.Schema:
              :y  Bool
              :a  Int32"""

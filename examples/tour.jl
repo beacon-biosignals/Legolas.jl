@@ -369,7 +369,7 @@ invalid = [Tables.rowmerge(row; k=string(row.k)) for row in table]
 invalid_but_has_metadata = Arrow.tobuffer(invalid; metadata=("legolas_schema_qualified" => Legolas.identifier(BazV1SchemaVersion()),))
 msg2 = """
       Tables.Schema violates Legolas schema `example.baz@1`:
-        - Incorrect type: `k` expected `<:Int64`, found `String`
+       - Incorrect type: `k` expected `<:Int64`, found `String`
       Provided Tables.Schema:
        :x  Int8
        :y  String

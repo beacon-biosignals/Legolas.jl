@@ -265,13 +265,13 @@ find_violation(::Tables.Schema, sv::SchemaVersion) = throw(UnknownSchemaVersionE
     Legolas.find_violations(ts::Tables.Schema, sv::Legolas.SchemaVersion)
 
 Return vector of all schema violations for table `ts` and schema `sv`; otherwise,
-return `Any[]`.
+return `nothing`.
 
 A schema violation occurs when a required field `f` of `sv` is not present in `ts`,
 reported as `f::Symbol => missing::Missing`, or when a required field `f` does not match
 the expected type `T`, reported as `f::Symbol => T::DataType`.
 
-See also: [`Legolas.find_violation`](@ref), [`Legolas.validate`](@ref), [`Legolas.complies_with`](@ref)
+See also: [`Legolas.validate`](@ref), [`Legolas.complies_with`](@ref)
 """
 find_violations(::Tables.Schema, sv::SchemaVersion) = throw(UnknownSchemaVersionError(sv))
 
@@ -299,10 +299,10 @@ function validate(ts::Tables.Schema, sv::SchemaVersion)
     end
     err_msg = "Tables.Schema violates Legolas schema `$(string(name(sv), "@", version(sv)))`:\n"
     for err in field_err
-        err_msg *= "  - Could not find required field: `$err`\n"
+        err_msg *= " - Could not find required field: `$err`\n"
     end
     for (field, expected, violation) in type_err
-        err_msg *= "  - Incorrect type: `$field` expected `<:$expected`, found `$violation`\n"
+        err_msg *= " - Incorrect type: `$field` expected `<:$expected`, found `$violation`\n"
     end
     err_msg *= "Provided $ts"
     throw(ArgumentError(err_msg))
