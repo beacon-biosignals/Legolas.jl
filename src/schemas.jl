@@ -488,13 +488,11 @@ function _generate_validation_definitions(schema_version::SchemaVersion)
     return quote
         function $(Legolas).find_violation(ts::$(Tables).Schema, sv::$(Base.Meta.quot(typeof(schema_version))))
             $(_violation_check(; fail_fast=true)...)
-            return nothing
         end
 
         # Multiple violation reporting
         function $(Legolas).find_violations(ts::$(Tables).Schema, sv::$(Base.Meta.quot(typeof(schema_version))))
             $(_violation_check(; fail_fast=false)...)
-            return nothing
         end
     end
 end
