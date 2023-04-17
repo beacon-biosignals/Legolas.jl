@@ -263,8 +263,8 @@ See also: [`Legolas.find_violations`](@ref), [`Legolas.validate`](@ref), [`Legol
 """
 function find_violation(ts::Tables.Schema, sv::SchemaVersion)
     Base.depwarn(
-        "The `find_violation` function will be deprecated in a future release. " *
-        "Please use `find_violations(args...)` instead of `find_violation(args...)`.",
+        "`find_violation(ts, sv)` is deprecated, use: `let v = find_violations(ts, sv); " *
+        "isempty(v) ? nothing : v; end` instead.",
         :find_violation,
     )
     violations = find_violations(ts, sv; fail_fast=true)
