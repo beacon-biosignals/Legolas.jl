@@ -274,8 +274,7 @@ end
 """
     Legolas.find_violations(ts::Tables.Schema, sv::Legolas.SchemaVersion)
 
-Return vector of all schema violations for table `ts` and schema `sv`; otherwise,
-return `nothing`.
+Return vector of all, if any, schema violations for table `ts` and schema `sv`.
 
 A schema violation occurs when a required field `f` of `sv` is not present in `ts`,
 reported as `f::Symbol => missing::Missing`, or when a required field `f` does not match
