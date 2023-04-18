@@ -254,30 +254,41 @@ accepted_field_type(::SchemaVersion, ::Type{Symbol}) = Union{Symbol,String}
 """
     Legolas.find_violation(ts::Tables.Schema, sv::Legolas.SchemaVersion)
 
-Return first schema violation; otherwise, return `nothing`. For description of
-schema violations, see [`Legolas.find_violations`](@ref).
+For required field `f::F` of `sv`:
 
-See also: [`Legolas.find_violations`](@ref), [`Legolas.validate`](@ref), [`Legolas.complies_with`](@ref)
+- Define `A = Legolas.accepted_field_type(sv, F)`
+- If `f::T` is present in `ts`, ensure that `T <: A` or else immediately return `f::Symbol => T::DataType`.
+- If `f` isn't present in `ts`, ensure that `Missing <: A` or else immediately return `f::Symbol => missing::Missing`.
+
+Otherwise, return `nothing`.
+
+To return *all* violations instead of just the first, use [`Legolas.find_violations`](@ref).
+
+See also: [`Legolas.validate`](@ref), [`Legolas.complies_with`](@ref), [`Legolas.find_violations`](@ref).
 """
 find_violation(::Tables.Schema, sv::SchemaVersion) = throw(UnknownSchemaVersionError(sv))
 
 """
     Legolas.find_violations(ts::Tables.Schema, sv::Legolas.SchemaVersion)
 
-Return vector of all, if any, schema violations for table `ts` and schema `sv`.
+Return vector of all violations, such that for required field `f::F` of `sv`:
 
-A schema violation occurs when a required field `f` of `sv` is not present in `ts`,
-reported as `f::Symbol => missing::Missing`, or when a required field `f` does not match
-the expected type `T`, reported as `f::Symbol => T::DataType`.
+- Define `A = Legolas.accepted_field_type(sv, F)`
+- If `f::T` is present in `ts`, ensure that `T <: A` or else append `f::Symbol => T::DataType`.
+- If `f` isn't present in `ts`, ensure that `Missing <: A` or else append `f::Symbol => missing::Missing`.
 
-See also: [`Legolas.validate`](@ref), [`Legolas.complies_with`](@ref)
+Otherwise, return `Pair{Symbol,Union{Type,Missing}}[]`.
+
+To immediately return the first violation found, use [`Legolas.find_violation`](@ref).
+
+See also: [`Legolas.validate`](@ref), [`Legolas.complies_with`](@ref), [`Legolas.find_violation`](@ref).
 """
 find_violations(::Tables.Schema, sv::SchemaVersion) = throw(UnknownSchemaVersionError(sv))
 
 """
     Legolas.validate(ts::Tables.Schema, sv::Legolas.SchemaVersion)
 
-Throws a descriptive `ArgumentError` if any violations are found, return `nothing` otherwise.
+Throws a descriptive `ArgumentError` if any violations are found, else return `nothing`.
 
 See also: [`Legolas.find_violation`](@ref), [`Legolas.find_violations`](@ref), [`Legolas.find_violation`](@ref), [`Legolas.complies_with`](@ref)
 """
@@ -467,7 +478,7 @@ function _generate_validation_definitions(schema_version::SchemaVersion)
     _violation_check = (; fail_fast::Bool) -> begin
         violations = Expr[]
         myvector = gensym()
-        push!(violations, :($myvector = Any[]))
+        push!(violations, :($myvector = Pair{Symbol,Union{Type,Missing}}[]))
         for (fname, ftype) in pairs(required_fields(schema_version))
             fname = Base.Meta.quot(fname)
             push!(violations, quote
