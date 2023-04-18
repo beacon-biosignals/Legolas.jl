@@ -5,7 +5,7 @@
 
 using Legolas, Arrow, Tables, Test, UUIDs
 
-using Legolas: @schema, @version, complies_with, find_violations, validate
+using Legolas: @schema, @version, complies_with, find_violation, find_violations, validate
 
 #####
 ##### Introduction
@@ -75,9 +75,12 @@ for s in [Tables.Schema((:a, :b, :c, :d), (Real, String, Any, AbstractVector)), 
     # returns `nothing` otherwise
     @test validate(s, FooV1SchemaVersion()) isa Nothing
 
-    # `find_violations` returns a vector of violations, if any, where each violation is a tuple indicating the relevant
+    # `find_violations` returns a vector of all violations, if any, where each violation is a tuple indicating the relevant
     # field and its violations
-    @test isnothing(find_violations(s, FooV1SchemaVersion()))
+    @test isempty(find_violations(s, FooV1SchemaVersion()))
+
+    # `find_violation` immediately returns the first violation found, or `nothing` if none found
+    @test isnothing(find_violation(s, FooV1SchemaVersion()))
 end
 
 # ...while the below `Tables.Schema`s do not:

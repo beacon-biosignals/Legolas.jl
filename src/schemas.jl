@@ -264,8 +264,7 @@ find_violation(::Tables.Schema, sv::SchemaVersion) = throw(UnknownSchemaVersionE
 """
     Legolas.find_violations(ts::Tables.Schema, sv::Legolas.SchemaVersion)
 
-Return vector of all schema violations for table `ts` and schema `sv`; otherwise,
-return `nothing`.
+Return vector of all, if any, schema violations for table `ts` and schema `sv`.
 
 A schema violation occurs when a required field `f` of `sv` is not present in `ts`,
 reported as `f::Symbol => missing::Missing`, or when a required field `f` does not match
@@ -278,13 +277,14 @@ find_violations(::Tables.Schema, sv::SchemaVersion) = throw(UnknownSchemaVersion
 """
     Legolas.validate(ts::Tables.Schema, sv::Legolas.SchemaVersion)
 
-Throws a descriptive `ArgumentError` if any violations are found.
+Throws a descriptive `ArgumentError` if any violations are found, return `nothing` otherwise.
 
-See also: [`Legolas.find_violations`](@ref), [`Legolas.find_violation`](@ref), [`Legolas.complies_with`](@ref)
+See also: [`Legolas.find_violation`](@ref), [`Legolas.find_violations`](@ref), [`Legolas.find_violation`](@ref), [`Legolas.complies_with`](@ref)
 """
 function validate(ts::Tables.Schema, sv::SchemaVersion)
     results = find_violations(ts, sv)
-    isnothing(results) && return nothing
+    @info results typeof(results)
+    isempty(results) && return nothing
 
     field_err = Symbol[]
     type_err = Tuple{Symbol,Type,Type}[]
@@ -311,11 +311,11 @@ end
 """
     Legolas.complies_with(ts::Tables.Schema, sv::Legolas.SchemaVersion)
 
-Return `isnothing(find_violations(ts, sv))`.
+Return `isnothing(find_violation(ts, sv))`.
 
-See also: [`Legolas.find_violations`](@ref), [`Legolas.validate`](@ref)
+See also: [`Legolas.find_violation`](@ref), [`Legolas.find_violations`](@ref), [`Legolas.validate`](@ref)
 """
-complies_with(ts::Tables.Schema, sv::SchemaVersion) = isnothing(find_violations(ts, sv))
+complies_with(ts::Tables.Schema, sv::SchemaVersion) = isnothing(find_violation(ts, sv))
 
 #####
 ##### `AbstractRecord`
@@ -481,7 +481,7 @@ function _generate_validation_definitions(schema_version::SchemaVersion)
             end)
         end
         push!(violations, quote
-            return length($myvector) > 0 ? $myvector : nothing
+            return $(fail_fast) ? nothing : $myvector
         end)
         return violations
     end
@@ -489,8 +489,8 @@ function _generate_validation_definitions(schema_version::SchemaVersion)
     return quote
         function $(Legolas).find_violation(ts::$(Tables).Schema, sv::$(Base.Meta.quot(typeof(schema_version))))
             Base.depwarn(
-                "The `find_violation` function will be deprecated in a future release. " *
-                "Please use `find_violations(args...)` instead of `find_violation(args...)`.",
+                "`find_violation` is deprecated ,  use: `let v = find_violations(ts, sv); " *
+                "isempty(v) ? nothing : v; end` instead.",
                 :find_violation,
             )
             $(_violation_check(; fail_fast=true)...)

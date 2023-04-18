@@ -370,6 +370,7 @@ end
             @test isnothing(Legolas.validate(t, s))
             @test Legolas.complies_with(t, s)
             @test isnothing(Legolas.find_violation(t, s))
+            @test isempty(Legolas.find_violations(t, s))
         end
 
         for T in (UUID, UInt128), S in (Symbol, String)
