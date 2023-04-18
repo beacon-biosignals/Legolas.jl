@@ -251,8 +251,6 @@ otherwise constitutes type piracy and should be avoided.
 accepted_field_type(::SchemaVersion, ::Type{UUID}) = Union{UUID,UInt128}
 accepted_field_type(::SchemaVersion, ::Type{Symbol}) = Union{Symbol,String}
 
-
-
 """
     Legolas.find_violation(ts::Tables.Schema, sv::Legolas.SchemaVersion)
 
@@ -261,20 +259,13 @@ schema violations, see [`Legolas.find_violations`](@ref).
 
 See also: [`Legolas.find_violations`](@ref), [`Legolas.validate`](@ref), [`Legolas.complies_with`](@ref)
 """
-function find_violation(ts::Tables.Schema, sv::SchemaVersion)
-    Base.depwarn(
-        "`find_violation(ts, sv)` is deprecated, use: `let v = find_violations(ts, sv); " *
-        "isempty(v) ? nothing : v; end` instead.",
-        :find_violation,
-    )
-    violations = find_violations(ts, sv)
-    return isempty(violations) ? nothing : first(violations)
-end
+find_violation(::Tables.Schema, sv::SchemaVersion) = throw(UnknownSchemaVersionError(sv))
 
 """
     Legolas.find_violations(ts::Tables.Schema, sv::Legolas.SchemaVersion)
 
-Return vector of all, if any, schema violations for table `ts` and schema `sv`.
+Return vector of all schema violations for table `ts` and schema `sv`; otherwise,
+return `nothing`.
 
 A schema violation occurs when a required field `f` of `sv` is not present in `ts`,
 reported as `f::Symbol => missing::Missing`, or when a required field `f` does not match
@@ -282,9 +273,7 @@ the expected type `T`, reported as `f::Symbol => T::DataType`.
 
 See also: [`Legolas.validate`](@ref), [`Legolas.complies_with`](@ref)
 """
-function find_violations(::Tables.Schema, sv::SchemaVersion)
-    throw(UnknownSchemaVersionError(sv))
-end
+find_violations(::Tables.Schema, sv::SchemaVersion) = throw(UnknownSchemaVersionError(sv))
 
 """
     Legolas.validate(ts::Tables.Schema, sv::Legolas.SchemaVersion)
@@ -295,7 +284,7 @@ See also: [`Legolas.find_violations`](@ref), [`Legolas.find_violation`](@ref), [
 """
 function validate(ts::Tables.Schema, sv::SchemaVersion)
     results = find_violations(ts, sv)
-    isempty(results) && return nothing
+    isnothing(results) && return nothing
 
     field_err = Symbol[]
     type_err = Tuple{Symbol,Type,Type}[]
@@ -326,7 +315,7 @@ Return `isnothing(find_violations(ts, sv))`.
 
 See also: [`Legolas.find_violations`](@ref), [`Legolas.validate`](@ref)
 """
-complies_with(ts::Tables.Schema, sv::SchemaVersion) = isempty(find_violations(ts, sv))
+complies_with(ts::Tables.Schema, sv::SchemaVersion) = isnothing(find_violations(ts, sv))
 
 #####
 ##### `AbstractRecord`
@@ -474,18 +463,42 @@ function _generate_schema_version_definitions(schema_version::SchemaVersion, par
 end
 
 function _generate_validation_definitions(schema_version::SchemaVersion)
-    SV = Base.Meta.quot(typeof(schema_version))
-    return quote
-        function Legolas.find_violations(ts::$(Tables).Schema, sv::$SV)
-            violations = Pair{Symbol,Union{Type,Missing}}[]
-            for (fname, ftype) in pairs(Legolas.required_fields(sv))
-                S = Legolas.accepted_field_type(sv, ftype)
-                result = Legolas._check_for_expected_field(ts, fname, S)
-                if !isnothing(result)
-                    push!(violations, fname => result)
+    # When `fail_fast == true`, return first violation found rather than all violations
+    _violation_check = (; fail_fast::Bool) -> begin
+        violations = Expr[]
+        myvector = gensym()
+        push!(violations, :($myvector = Any[]))
+        for (fname, ftype) in pairs(required_fields(schema_version))
+            fname = Base.Meta.quot(fname)
+            push!(violations, quote
+                S = $Legolas.accepted_field_type(sv, $ftype)
+                result = $Legolas._check_for_expected_field(ts, $fname, S)
+                if !isnothing(result) && $(fail_fast)
+                    return $fname => result
+                elseif !isnothing(result)
+                    push!($myvector, ($fname => result))
                 end
-            end
-            return violations
+            end)
+        end
+        push!(violations, quote
+            return length($myvector) > 0 ? $myvector : nothing
+        end)
+        return violations
+    end
+
+    return quote
+        function $(Legolas).find_violation(ts::$(Tables).Schema, sv::$(Base.Meta.quot(typeof(schema_version))))
+            Base.depwarn(
+                "The `find_violation` function will be deprecated in a future release. " *
+                "Please use `find_violations(args...)` instead of `find_violation(args...)`.",
+                :find_violation,
+            )
+            $(_violation_check(; fail_fast=true)...)
+        end
+
+        # Multiple violation reporting
+        function $(Legolas).find_violations(ts::$(Tables).Schema, sv::$(Base.Meta.quot(typeof(schema_version))))
+            $(_violation_check(; fail_fast=false)...)
         end
     end
 end
