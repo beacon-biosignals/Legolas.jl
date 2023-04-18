@@ -262,7 +262,7 @@ For required field `f::F` of `sv`:
 
 Otherwise, return `nothing`.
 
-To return *all* violations instead of just the first, use [`Legolas.find_violations`](@ref).
+To return all violations instead of just the first, use [`Legolas.find_violations`](@ref).
 
 See also: [`Legolas.validate`](@ref), [`Legolas.complies_with`](@ref), [`Legolas.find_violations`](@ref).
 """
@@ -294,7 +294,6 @@ See also: [`Legolas.find_violation`](@ref), [`Legolas.find_violations`](@ref), [
 """
 function validate(ts::Tables.Schema, sv::SchemaVersion)
     results = find_violations(ts, sv)
-    @info results typeof(results)
     isempty(results) && return nothing
 
     field_err = Symbol[]

@@ -79,7 +79,7 @@ for s in [Tables.Schema((:a, :b, :c, :d), (Real, String, Any, AbstractVector)), 
     # field and its violations
     @test isempty(find_violations(s, FooV1SchemaVersion()))
 
-    # `find_violation` immediately returns the first violation found, or `nothing` if none found
+    # `find_violation` immediately returns the first violation found, returns `nothing` otherwise
     @test isnothing(find_violation(s, FooV1SchemaVersion()))
 end
 
@@ -88,11 +88,13 @@ end
 s = Tables.Schema((:a, :c, :d), (Int, Float64, Vector)) # The required non-`>:Missing` field `b::String` is not present.
 @test !complies_with(s, FooV1SchemaVersion())
 @test_throws ArgumentError validate(s, FooV1SchemaVersion())
+@test isequal(find_violation(s, FooV1SchemaVersion()), :b => missing)
 @test isequal(find_violations(s, FooV1SchemaVersion()), [:b => missing])
 
 s = Tables.Schema((:a, :b, :c, :d), (Int, String, Float64, Any)) # The type of required field `d::AbstractVector` is not `<:AbstractVector`.
 @test !complies_with(s, FooV1SchemaVersion())
 @test_throws ArgumentError validate(s, FooV1SchemaVersion())
+@test isequal(find_violation(s, FooV1SchemaVersion()), :d => Any)
 @test isequal(find_violations(s, FooV1SchemaVersion()), [:d => Any])
 
 # The expectations that characterize Legolas' particular notion of "schematic compliance" - requiring the
