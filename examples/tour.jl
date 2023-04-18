@@ -75,8 +75,8 @@ for s in [Tables.Schema((:a, :b, :c, :d), (Real, String, Any, AbstractVector)), 
     # returns `nothing` otherwise
     @test validate(s, FooV1SchemaVersion()) isa Nothing
 
-    # if `find_violations` finds any violations, it returns a vector of tuples indicating the relevant
-    # fields and their violations
+    # `find_violations` returns a vector of violations, if any, where each violation is a tuple indicating the relevant
+    # field and its violations
     @test isempty(find_violations(s, FooV1SchemaVersion()))
 end
 
