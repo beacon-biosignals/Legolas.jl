@@ -488,11 +488,6 @@ function _generate_validation_definitions(schema_version::SchemaVersion)
 
     return quote
         function $(Legolas).find_violation(ts::$(Tables).Schema, sv::$(Base.Meta.quot(typeof(schema_version))))
-            Base.depwarn(
-                "`find_violation` is deprecated ,  use: `let v = find_violations(ts, sv); " *
-                "isempty(v) ? nothing : v; end` instead.",
-                :find_violation,
-            )
             $(_violation_check(; fail_fast=true)...)
         end
 
