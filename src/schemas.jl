@@ -475,24 +475,30 @@ end
 function _generate_validation_definitions(schema_version::SchemaVersion)
     # When `fail_fast == true`, return first violation found rather than all violations
     _violation_check = (; fail_fast::Bool) -> begin
-        violations = Expr[]
-        myvector = gensym()
-        push!(violations, :($myvector = Pair{Symbol,Union{Type,Missing}}[]))
+        statements = Expr[]
+        violations = gensym()
+        if !fail_fast
+            push!(statements, :($violations = Pair{Symbol,Union{Type,Missing}}[]))
+        end
         for (fname, ftype) in pairs(required_fields(schema_version))
             fname = Base.Meta.quot(fname)
-            push!(violations, quote
+            push!(statements, quote
                 S = $Legolas.accepted_field_type(sv, $ftype)
                 result = $Legolas._check_for_expected_field(ts, $fname, S)
-                if !isnothing(result) && $(fail_fast)
-                    return $fname => result
-                elseif !isnothing(result)
-                    push!($myvector, ($fname => result))
-                end
+            end)
+            push!(statements, if fail_fast
+                :(isnothing(result) || return $fname => result)
+            else
+                :(isnothing(result) || push!($violations, $fname => result))
             end)
         end
-        push!(violations, quote
-            return $(fail_fast) ? nothing : $myvector
+        push!(statements, if fail_fast
+            :(return nothing)
+        else
+            :(return $violations)
         end)
+        return statements
+    end
         return violations
     end
 
