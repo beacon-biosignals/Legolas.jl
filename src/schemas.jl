@@ -271,15 +271,9 @@ find_violation(::Tables.Schema, sv::SchemaVersion) = throw(UnknownSchemaVersionE
 """
     Legolas.find_violations(ts::Tables.Schema, sv::Legolas.SchemaVersion)
 
-Return vector of all violations, such that for required field `f::F` of `sv`:
+Return a `Vector{Pair{Symbol,Union{Type,Missing}}}` of all of `ts`'s violations with respect to `sv`.
 
-- Define `A = Legolas.accepted_field_type(sv, F)`
-- If `f::T` is present in `ts`, ensure that `T <: A` or else append `f::Symbol => T::DataType`.
-- If `f` isn't present in `ts`, ensure that `Missing <: A` or else append `f::Symbol => missing::Missing`.
-
-Otherwise, return `Pair{Symbol,Union{Type,Missing}}[]`.
-
-To immediately return the first violation found, use [`Legolas.find_violation`](@ref).
+This function's notion of "violation" is defined by [`Legolas.find_violation`](@ref), which immediately returns the first violation found; prefer to use that function instead of `find_violations` in situations where you only need to detect *any* violation instead of *all* violations. 
 
 See also: [`Legolas.validate`](@ref), [`Legolas.complies_with`](@ref), [`Legolas.find_violation`](@ref).
 """
