@@ -26,6 +26,7 @@ Legolas.record_type
 Legolas.schema_version_from_record
 Legolas.declared
 Legolas.find_violation
+Legolas.find_violations
 Legolas.complies_with
 Legolas.validate
 Legolas.accepted_field_type
