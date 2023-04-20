@@ -315,17 +315,54 @@ end
         # functions work as expected w.r.t. schema extension in particular.
 
         t = Tables.Schema((:a, :y, :z), (Int32, String, Any))
-        for s in (GrandchildV1SchemaVersion(), ChildV1SchemaVersion(), ParentV1SchemaVersion())
-            @test_throws ArgumentError("could not find expected field `x` in $t") Legolas.validate(t, s)
+        for (s, id) in ((GrandchildV1SchemaVersion(), "test.grandchild@1"),
+                        (ChildV1SchemaVersion(), "test.child@1"),
+                        (ParentV1SchemaVersion(), "test.parent@1"))
+            msg = """
+                  Tables.Schema violates Legolas schema `$id`:
+                   - Could not find required field: `x`
+                  Provided Tables.Schema:
+                   :a  Int32
+                   :y  String
+                   :z  Any"""
+            @test_throws ArgumentError(msg) Legolas.validate(t, s)
             @test !Legolas.complies_with(t, s)
             @test isequal(Legolas.find_violation(t, s), :x => missing)
+            @test isequal(Legolas.find_violations(t, s), [:x => missing])
         end
 
-        t = Tables.Schema((:x, :a, :y), (ComplexF64, Int32, String))
-        for s in (GrandchildV1SchemaVersion(), ChildV1SchemaVersion(), ParentV1SchemaVersion())
-            @test_throws ArgumentError("field `x` has unexpected type; expected <:$(Vector), found $(Complex{Float64})") Legolas.validate(t, s)
+        # Multiple missing field violations
+        t = Tables.Schema((:a, :z), (Int32, Any))
+        for (s, id) in ((GrandchildV1SchemaVersion(), "test.grandchild@1"),
+                        (ChildV1SchemaVersion(), "test.child@1"),
+                        (ParentV1SchemaVersion(), "test.parent@1"))
+            msg = """
+                  Tables.Schema violates Legolas schema `$id`:
+                   - Could not find required field: `x`
+                   - Could not find required field: `y`
+                  Provided Tables.Schema:
+                   :a  Int32
+                   :z  Any"""
+            @test_throws ArgumentError(msg) Legolas.validate(t, s)
             @test !Legolas.complies_with(t, s)
-            @test isequal(Legolas.find_violation(t, s), :x => ComplexF64)
+            @test isequal(Legolas.find_violation(t, s), :x => missing)
+            @test isequal(Legolas.find_violations(t, s), [:x => missing, :y => missing])
+        end
+
+        # Multiple violations, both missing fields and type error
+        t = Tables.Schema((:y, :a), (Bool, Int32))
+        let s = GrandchildV1SchemaVersion()
+            msg = """
+            Tables.Schema violates Legolas schema `test.grandchild@1`:
+             - Could not find required field: `x`
+             - Incorrect type: `y` expected `<:String`, found `Bool`
+            Provided Tables.Schema:
+             :y  Bool
+             :a  Int32"""
+            @test_throws ArgumentError(msg) Legolas.validate(t, s)
+            @test !Legolas.complies_with(t, s)
+            @test isequal(Legolas.find_violation(t, s), :x => missing)
+            @test isequal(Legolas.find_violations(t, s), [:x => missing, :y => Bool])
         end
 
         t = Tables.Schema((:x, :a, :y), (Vector, Int32, String))
@@ -333,6 +370,7 @@ end
             @test isnothing(Legolas.validate(t, s))
             @test Legolas.complies_with(t, s)
             @test isnothing(Legolas.find_violation(t, s))
+            @test isempty(Legolas.find_violations(t, s))
         end
 
         for T in (UUID, UInt128), S in (Symbol, String)

@@ -262,27 +262,54 @@ For required field `f::F` of `sv`:
 
 Otherwise, return `nothing`.
 
-See also: [`Legolas.validate`](@ref), [`Legolas.complies_with`](@ref)
+To return all violations instead of just the first, use [`Legolas.find_violations`](@ref).
+
+See also: [`Legolas.validate`](@ref), [`Legolas.complies_with`](@ref), [`Legolas.find_violations`](@ref).
 """
 find_violation(::Tables.Schema, sv::SchemaVersion) = throw(UnknownSchemaVersionError(sv))
 
-function _find_violation end
+"""
+    Legolas.find_violations(ts::Tables.Schema, sv::Legolas.SchemaVersion)
+
+Return a `Vector{Pair{Symbol,Union{Type,Missing}}}` of all of `ts`'s violations with respect to `sv`.
+
+This function's notion of "violation" is defined by [`Legolas.find_violation`](@ref), which immediately returns the first violation found; prefer to use that function instead of `find_violations` in situations where you only need to detect *any* violation instead of *all* violations. 
+
+See also: [`Legolas.validate`](@ref), [`Legolas.complies_with`](@ref), [`Legolas.find_violation`](@ref).
+"""
+find_violations(::Tables.Schema, sv::SchemaVersion) = throw(UnknownSchemaVersionError(sv))
 
 """
     Legolas.validate(ts::Tables.Schema, sv::Legolas.SchemaVersion)
 
-Throws a descriptive `ArgumentError` if `!isnothing(find_violation(ts, sv))`,
-otherwise return `nothing`.
+Throws a descriptive `ArgumentError` if any violations are found, else return `nothing`.
 
-See also: [`Legolas.find_violation`](@ref), [`Legolas.complies_with`](@ref)
+See also: [`Legolas.find_violation`](@ref), [`Legolas.find_violations`](@ref), [`Legolas.find_violation`](@ref), [`Legolas.complies_with`](@ref)
 """
 function validate(ts::Tables.Schema, sv::SchemaVersion)
-    result = find_violation(ts, sv)
-    isnothing(result) && return nothing
-    field, violation = result
-    ismissing(violation) && throw(ArgumentError("could not find expected field `$field` in $ts"))
-    expected = getfield(required_fields(sv), field)
-    throw(ArgumentError("field `$field` has unexpected type; expected <:$expected, found $violation"))
+    results = find_violations(ts, sv)
+    isempty(results) && return nothing
+
+    field_err = Symbol[]
+    type_err = Tuple{Symbol,Type,Type}[]
+    for result in results
+        field, violation = result
+        if ismissing(violation)
+            push!(field_err, field)
+        else
+            expected = getfield(required_fields(sv), field)
+            push!(type_err, (field, expected, violation))
+        end
+    end
+    err_msg = "Tables.Schema violates Legolas schema `$(string(name(sv), "@", version(sv)))`:\n"
+    for err in field_err
+        err_msg *= " - Could not find required field: `$err`\n"
+    end
+    for (field, expected, violation) in type_err
+        err_msg *= " - Incorrect type: `$field` expected `<:$expected`, found `$violation`\n"
+    end
+    err_msg *= "Provided $ts"
+    throw(ArgumentError(err_msg))
 end
 
 """
@@ -290,7 +317,7 @@ end
 
 Return `isnothing(find_violation(ts, sv))`.
 
-See also: [`Legolas.find_violation`](@ref), [`Legolas.validate`](@ref)
+See also: [`Legolas.find_violation`](@ref), [`Legolas.find_violations`](@ref), [`Legolas.validate`](@ref)
 """
 complies_with(ts::Tables.Schema, sv::SchemaVersion) = isnothing(find_violation(ts, sv))
 
@@ -440,19 +467,32 @@ function _generate_schema_version_definitions(schema_version::SchemaVersion, par
 end
 
 function _generate_validation_definitions(schema_version::SchemaVersion)
-    field_violation_check_statements = Expr[]
-    for (fname, ftype) in pairs(required_fields(schema_version))
-        fname = Base.Meta.quot(fname)
-        push!(field_violation_check_statements, quote
-            S = $Legolas.accepted_field_type(sv, $ftype)
-            result = $Legolas._check_for_expected_field(ts, $fname, S)
-            isnothing(result) || return $fname => result
-        end)
+    # When `fail_fast == true`, return first violation found rather than all violations
+    _violation_check = (; fail_fast::Bool) -> begin
+        statements = Expr[]
+        violations = gensym()
+        fail_fast || push!(statements, :($violations = Pair{Symbol,Union{Type,Missing}}[]))
+        for (fname, ftype) in pairs(required_fields(schema_version))
+            fname = Base.Meta.quot(fname)
+            found = :($fname => result)
+            handle_found = fail_fast ? :(return $found) : :(push!($violations, $found))
+            push!(statements, quote
+                S = $Legolas.accepted_field_type(sv, $ftype)
+                result = $Legolas._check_for_expected_field(ts, $fname, S)
+                isnothing(result) || $handle_found
+            end)
+        end
+        push!(statements, :(return $(fail_fast ? :nothing : violations)))
+        return statements
     end
     return quote
         function $(Legolas).find_violation(ts::$(Tables).Schema, sv::$(Base.Meta.quot(typeof(schema_version))))
-            $(field_violation_check_statements...)
-            return nothing
+            $(_violation_check(; fail_fast=true)...)
+        end
+
+        # Multiple violation reporting
+        function $(Legolas).find_violations(ts::$(Tables).Schema, sv::$(Base.Meta.quot(typeof(schema_version))))
+            $(_violation_check(; fail_fast=false)...)
         end
     end
 end

@@ -5,7 +5,7 @@
 
 using Legolas, Arrow, Tables, Test, UUIDs
 
-using Legolas: @schema, @version, complies_with, find_violation, validate
+using Legolas: @schema, @version, complies_with, find_violation, find_violations, validate
 
 #####
 ##### Introduction
@@ -58,7 +58,7 @@ end
 ##### `Tables.Schema` Compliance/Validation
 #####
 
-# We can use `complies_with`, `validate`, and `find_violation` to check whether a given
+# We can use `complies_with`, `validate`, and `find_violations` to check whether a given
 # `Tables.Schema` (ref https://tables.juliadata.org/stable/#Tables.Schema) complies with
 # `example.foo@1`.
 
@@ -71,12 +71,15 @@ for s in [Tables.Schema((:a, :b, :c, :d), (Real, String, Any, AbstractVector)), 
     # if `complies_with` finds a violation, it returns `false`; returns `true` otherwise
     @test complies_with(s, FooV1SchemaVersion())
 
-    # if `validate` finds a violation, it throws an error indicating the violation;
+    # if `validate` finds any violations, it throws an error indicating the violations;
     # returns `nothing` otherwise
     @test validate(s, FooV1SchemaVersion()) isa Nothing
 
-    # if `find_violation` finds a violation, it returns a tuple indicating the relevant
-    # field and its violation; returns `nothing` otherwise
+    # `find_violations` returns a vector of all violations, if any, where each violation is a tuple indicating the relevant
+    # field and its violations
+    @test isempty(find_violations(s, FooV1SchemaVersion()))
+
+    # `find_violation` immediately returns the first violation found, returns `nothing` otherwise
     @test isnothing(find_violation(s, FooV1SchemaVersion()))
 end
 
@@ -86,11 +89,13 @@ s = Tables.Schema((:a, :c, :d), (Int, Float64, Vector)) # The required non-`>:Mi
 @test !complies_with(s, FooV1SchemaVersion())
 @test_throws ArgumentError validate(s, FooV1SchemaVersion())
 @test isequal(find_violation(s, FooV1SchemaVersion()), :b => missing)
+@test isequal(find_violations(s, FooV1SchemaVersion()), [:b => missing])
 
 s = Tables.Schema((:a, :b, :c, :d), (Int, String, Float64, Any)) # The type of required field `d::AbstractVector` is not `<:AbstractVector`.
 @test !complies_with(s, FooV1SchemaVersion())
 @test_throws ArgumentError validate(s, FooV1SchemaVersion())
 @test isequal(find_violation(s, FooV1SchemaVersion()), :d => Any)
+@test isequal(find_violations(s, FooV1SchemaVersion()), [:d => Any])
 
 # The expectations that characterize Legolas' particular notion of "schematic compliance" - requiring the
 # presence of pre-specified declared fields, assuming non-present fields to be implicitly `missing`, and allowing
@@ -120,7 +125,7 @@ fields = (a=1.0, b="hi", c=π, d=[1, 2, 3])
 #
 # - ...contain the associated schema version's required fields in any order
 # - ...elide required fields, in which case the constructor will assume them to be `missing`
-# - ...contain any other fields in addition to the required fields; such additional fields are simply ignored 
+# - ...contain any other fields in addition to the required fields; such additional fields are simply ignored
 #   by the constructor and are not propagated through to the resulting record.
 #
 # Demonstrating a few of these properties:
@@ -367,7 +372,15 @@ msg = """
 @test_throws ArgumentError(msg) Legolas.read(Arrow.tobuffer(table))
 invalid = [Tables.rowmerge(row; k=string(row.k)) for row in table]
 invalid_but_has_metadata = Arrow.tobuffer(invalid; metadata=("legolas_schema_qualified" => Legolas.identifier(BazV1SchemaVersion()),))
-@test_throws ArgumentError("field `k` has unexpected type; expected <:Int64, found String") Legolas.read(invalid_but_has_metadata)
+msg2 = """
+      Tables.Schema violates Legolas schema `example.baz@1`:
+       - Incorrect type: `k` expected `<:Int64`, found `String`
+      Provided Tables.Schema:
+       :x  Int8
+       :y  String
+       :z  String
+       :k  String"""
+@test_throws ArgumentError(msg2) Legolas.read(invalid_but_has_metadata)
 
 # A note about one additional benefit of `Legolas.read`/`Legolas.write`: Unlike their Arrow.jl counterparts,
 # these functions are relatively agnostic to the types of provided path arguments. Generally, as long as a
