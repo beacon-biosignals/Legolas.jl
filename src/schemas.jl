@@ -477,31 +477,20 @@ function _generate_validation_definitions(schema_version::SchemaVersion)
     _violation_check = (; fail_fast::Bool) -> begin
         statements = Expr[]
         violations = gensym()
-        if !fail_fast
-            push!(statements, :($violations = Pair{Symbol,Union{Type,Missing}}[]))
-        end
+        fail_fast || push!(statements, :($violations = Pair{Symbol,Union{Type,Missing}}[]))
         for (fname, ftype) in pairs(required_fields(schema_version))
             fname = Base.Meta.quot(fname)
+            found = :($fname => result)
+            handle_found = fail_fast ? :(return $found) : :(push!($violations, $found))
             push!(statements, quote
                 S = $Legolas.accepted_field_type(sv, $ftype)
                 result = $Legolas._check_for_expected_field(ts, $fname, S)
-            end)
-            push!(statements, if fail_fast
-                :(isnothing(result) || return $fname => result)
-            else
-                :(isnothing(result) || push!($violations, $fname => result))
+                isnothing(result) || $handle_found
             end)
         end
-        push!(statements, if fail_fast
-            :(return nothing)
-        else
-            :(return $violations)
-        end)
+        push!(statements, :(return $(fail_fast ? :nothing : violations)))
         return statements
     end
-        return violations
-    end
-
     return quote
         function $(Legolas).find_violation(ts::$(Tables).Schema, sv::$(Base.Meta.quot(typeof(schema_version))))
             $(_violation_check(; fail_fast=true)...)
