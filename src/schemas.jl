@@ -241,9 +241,9 @@ Legolas itself defines the following default overloads:
 
     accepted_field_type(::SchemaVersion, T::Type) = T
     accepted_field_type(::SchemaVersion, ::Type{UUID}) = Union{UUID,UInt128}
-    accepted_field_type(::SchemaVersion, ::Type{Symbol}) = Union{Symbol,String}
-    accepted_field_type(::SchemaVersion, ::Type{Vector{String}}) = AbstractVector{<:AbstractString}
-    accepted_field_type(::SchemaVersion, ::Type{Vector{T}}) where T = AbstractVector{<:T}
+    accepted_field_type(::SchemaVersion, ::Type{Symbol}) = Union{Symbol,AbstractString}
+    accepted_field_type(::SchemaVersion, ::Type{String}) = AbstractString
+    accepted_field_type(sv::SchemaVersion, ::Type{<:Vector{T}}) where T = AbstractVector{<:(accepted_field_type(sv, T))}
     accepted_field_type(::SchemaVersion, ::Type{Vector}) = AbstractVector
 
 Outside of these default overloads, this function should only be overloaded against specific
@@ -252,8 +252,8 @@ otherwise constitutes type piracy and should be avoided.
 """
 @inline accepted_field_type(::SchemaVersion, T::Type) = T
 accepted_field_type(::SchemaVersion, ::Type{UUID}) = Union{UUID,UInt128}
-accepted_field_type(::SchemaVersion, ::Type{Symbol}) = Union{Symbol,String}
-accepted_field_type(::SchemaVersion, ::Type{Vector{String}}) = AbstractVector{<:AbstractString}
+accepted_field_type(::SchemaVersion, ::Type{Symbol}) = Union{Symbol,AbstractString}
+accepted_field_type(::SchemaVersion, ::Type{String}) = AbstractString
 accepted_field_type(sv::SchemaVersion, ::Type{<:Vector{T}}) where T = AbstractVector{<:(accepted_field_type(sv, T))}
 accepted_field_type(::SchemaVersion, ::Type{Vector}) = AbstractVector
 
