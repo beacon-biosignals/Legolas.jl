@@ -241,7 +241,10 @@ Legolas itself defines the following default overloads:
 
     accepted_field_type(::SchemaVersion, T::Type) = T
     accepted_field_type(::SchemaVersion, ::Type{UUID}) = Union{UUID,UInt128}
-    accepted_field_type(::SchemaVersion, ::Type{Symbol}) = Union{Symbol,String}
+    accepted_field_type(::SchemaVersion, ::Type{Symbol}) = Union{Symbol,AbstractString}
+    accepted_field_type(::SchemaVersion, ::Type{String}) = AbstractString
+    accepted_field_type(sv::SchemaVersion, ::Type{<:Vector{T}}) where T = AbstractVector{<:(accepted_field_type(sv, T))}
+    accepted_field_type(::SchemaVersion, ::Type{Vector}) = AbstractVector
 
 Outside of these default overloads, this function should only be overloaded against specific
 `SchemaVersion`s that are authored within the same module as the overload definition; to do
@@ -249,7 +252,10 @@ otherwise constitutes type piracy and should be avoided.
 """
 @inline accepted_field_type(::SchemaVersion, T::Type) = T
 accepted_field_type(::SchemaVersion, ::Type{UUID}) = Union{UUID,UInt128}
-accepted_field_type(::SchemaVersion, ::Type{Symbol}) = Union{Symbol,String}
+accepted_field_type(::SchemaVersion, ::Type{Symbol}) = Union{Symbol,AbstractString}
+accepted_field_type(::SchemaVersion, ::Type{String}) = AbstractString
+accepted_field_type(sv::SchemaVersion, ::Type{<:Vector{T}}) where T = AbstractVector{<:(accepted_field_type(sv, T))}
+accepted_field_type(::SchemaVersion, ::Type{Vector}) = AbstractVector
 
 """
     Legolas.find_violation(ts::Tables.Schema, sv::Legolas.SchemaVersion)
@@ -273,7 +279,7 @@ find_violation(::Tables.Schema, sv::SchemaVersion) = throw(UnknownSchemaVersionE
 
 Return a `Vector{Pair{Symbol,Union{Type,Missing}}}` of all of `ts`'s violations with respect to `sv`.
 
-This function's notion of "violation" is defined by [`Legolas.find_violation`](@ref), which immediately returns the first violation found; prefer to use that function instead of `find_violations` in situations where you only need to detect *any* violation instead of *all* violations. 
+This function's notion of "violation" is defined by [`Legolas.find_violation`](@ref), which immediately returns the first violation found; prefer to use that function instead of `find_violations` in situations where you only need to detect *any* violation instead of *all* violations.
 
 See also: [`Legolas.validate`](@ref), [`Legolas.complies_with`](@ref), [`Legolas.find_violation`](@ref).
 """
