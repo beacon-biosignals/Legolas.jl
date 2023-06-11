@@ -640,4 +640,29 @@ end
         e = ArgumentError("Invalid value set for field `a`, expected Integer, got a value of type String (\"foo-bar\")")
         @test_throws e FieldErrorV3(; a="foo bar")
     end
+
+    @testset "Macro invocation doesn't require Legolas module name in caller's scope" begin
+        # https://github.com/beacon-biosignals/Legolas.jl/issues/91
+        module Namespace91
+            using Test
+            using Legolas: @schema, @version, tobuffer, read
+
+            # Define something else with the name Legolas
+            struct Legolas end
+
+            @schema "test.a91" A91
+
+            @version A91V1 begin
+                a::Int
+            end
+
+            # Try out a bunch of the auto-generated methods
+            # to ensure the wrong `Legolas` name isn't hidden in one of them
+            @test A91V1(; a=1) isa A91V1
+            @test hash(A91V1(; a=1)) isa UInt
+            @test A91V1(; a=1) == A91V1(; a=1)
+            @test isequal(A91V1(; a=1), A91V1(; a=1))
+            @test read(tobuffer([A91V1(; a=1)], A91V1SchemaVersion())).a == [1]
+        end # module
+    end
 end

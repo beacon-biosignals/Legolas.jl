@@ -369,11 +369,11 @@ macro schema(schema_name, schema_prefix)
     return quote
         # This approach provides some safety against accidentally replacing another module's schema's name,
         # without making it annoying to reload code/modules in an interactice development context.
-        m = Legolas._schema_declared_in_module(Val(Symbol($schema_name)))
+        m = $Legolas._schema_declared_in_module(Val(Symbol($schema_name)))
         if m isa Module && string(m) != string(@__MODULE__)
             throw(ArgumentError(string("A schema with this name was already declared by a different module: ", m)))
         else
-            Legolas._schema_declared_in_module(::Val{Symbol($schema_name)}) = @__MODULE__
+            $Legolas._schema_declared_in_module(::Val{Symbol($schema_name)}) = @__MODULE__
             if !isdefined(@__MODULE__, :__legolas_schema_name_from_prefix__)
                 $(esc(:__legolas_schema_name_from_prefix__))(::Val) = nothing
             end
@@ -464,11 +464,11 @@ function _generate_schema_version_definitions(schema_version::SchemaVersion, par
     end
     quoted_schema_version_type = Base.Meta.quot(typeof(schema_version))
     return quote
-        @inline Legolas.declared(::$quoted_schema_version_type) = true
-        @inline Legolas.identifier(::$quoted_schema_version_type) = $identifier_string
-        @inline Legolas.parent(::$quoted_schema_version_type) = $(Base.Meta.quot(parent))
-        Legolas.required_fields(::$quoted_schema_version_type) = $required_field_names_types
-        Legolas.declaration(::$quoted_schema_version_type) = $(Base.Meta.quot(schema_version_declaration))
+        @inline $Legolas.declared(::$quoted_schema_version_type) = true
+        @inline $Legolas.identifier(::$quoted_schema_version_type) = $identifier_string
+        @inline $Legolas.parent(::$quoted_schema_version_type) = $(Base.Meta.quot(parent))
+        $Legolas.required_fields(::$quoted_schema_version_type) = $required_field_names_types
+        $Legolas.declaration(::$quoted_schema_version_type) = $(Base.Meta.quot(schema_version_declaration))
     end
 end
 
@@ -658,9 +658,9 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
         $outer_constructor_definitions
         $base_overload_definitions
         $arrow_overload_definitions
-        Legolas.record_type(::$(Base.Meta.quot(typeof(schema_version)))) = $R
-        Legolas.schema_version_from_record(::$R) = $schema_version
-        Legolas._schema_version_from_record_type(::Type{<:$R}) = $schema_version
+        $Legolas.record_type(::$(Base.Meta.quot(typeof(schema_version)))) = $R
+        $Legolas.schema_version_from_record(::$R) = $schema_version
+        $Legolas._schema_version_from_record_type(::Type{<:$R}) = $schema_version
     end
 end
 
@@ -805,26 +805,26 @@ macro version(record_type, required_fields_block)
             throw(SchemaVersionDeclarationError(string("missing prior `@schema` declaration for `", $quoted_schema_prefix, "` in current module")))
         else
             schema_name = (@__MODULE__).__legolas_schema_name_from_prefix__(Val($quoted_schema_prefix))
-            schema_version = Legolas.SchemaVersion{schema_name,$schema_version_integer}()
-            parent = Legolas._schema_version_from_record_type($(esc(parent_record_type)))
+            schema_version = $Legolas.SchemaVersion{schema_name,$schema_version_integer}()
+            parent = $Legolas._schema_version_from_record_type($(esc(parent_record_type)))
 
             declared_identifier = string(schema_name, '@', $schema_version_integer)
             if !isnothing(parent)
-                declared_identifier = string(declared_identifier, '>', Legolas.name(parent), '@', Legolas.version(parent))
+                declared_identifier = string(declared_identifier, '>', $Legolas.name(parent), '@', $Legolas.version(parent))
             end
             schema_version_declaration = declared_identifier => $(Base.Meta.quot(required_field_infos))
 
-            if Legolas.declared(schema_version) && Legolas.declaration(schema_version) != schema_version_declaration
+            if $Legolas.declared(schema_version) && $Legolas.declaration(schema_version) != schema_version_declaration
                 throw(SchemaVersionDeclarationError("invalid redeclaration of existing schema version; all `@version` redeclarations must exactly match previous declarations"))
-            elseif parent isa Legolas.SchemaVersion && Legolas.name(parent) == schema_name
+            elseif parent isa $Legolas.SchemaVersion && $Legolas.name(parent) == schema_name
                 throw(SchemaVersionDeclarationError("cannot extend from another version of the same schema"))
-            elseif parent isa Legolas.SchemaVersion && !(Legolas._has_valid_child_field_types($declared_field_names_types, Legolas.required_fields(parent)))
+            elseif parent isa $Legolas.SchemaVersion && !($Legolas._has_valid_child_field_types($declared_field_names_types, $Legolas.required_fields(parent)))
                 throw(SchemaVersionDeclarationError("declared field types violate parent's field types"))
             else
                 Base.@__doc__($(Base.Meta.quot(record_type)))
-                $(esc(:eval))(Legolas._generate_schema_version_definitions(schema_version, parent, $declared_field_names_types, schema_version_declaration))
-                $(esc(:eval))(Legolas._generate_validation_definitions(schema_version))
-                $(esc(:eval))(Legolas._generate_record_type_definitions(schema_version, $(Base.Meta.quot(record_type))))
+                $(esc(:eval))($Legolas._generate_schema_version_definitions(schema_version, parent, $declared_field_names_types, schema_version_declaration))
+                $(esc(:eval))($Legolas._generate_validation_definitions(schema_version))
+                $(esc(:eval))($Legolas._generate_record_type_definitions(schema_version, $(Base.Meta.quot(record_type))))
             end
         end
         nothing
