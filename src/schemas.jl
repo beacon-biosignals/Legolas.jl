@@ -240,22 +240,26 @@ record type.
 Legolas itself defines the following default overloads:
 
     accepted_field_type(::SchemaVersion, T::Type) = T
+    accepted_field_type(::SchemaVersion, ::Type{Any}) = Any
     accepted_field_type(::SchemaVersion, ::Type{UUID}) = Union{UUID,UInt128}
     accepted_field_type(::SchemaVersion, ::Type{Symbol}) = Union{Symbol,AbstractString}
     accepted_field_type(::SchemaVersion, ::Type{String}) = AbstractString
     accepted_field_type(sv::SchemaVersion, ::Type{<:Vector{T}}) where T = AbstractVector{<:(accepted_field_type(sv, T))}
     accepted_field_type(::SchemaVersion, ::Type{Vector}) = AbstractVector
+    accepted_field_type(sv::SchemaVersion, ::Type{Union{T,Missing}}) where {T} = Union{accepted_field_type(sv, T),Missing}
 
 Outside of these default overloads, this function should only be overloaded against specific
 `SchemaVersion`s that are authored within the same module as the overload definition; to do
 otherwise constitutes type piracy and should be avoided.
 """
 @inline accepted_field_type(::SchemaVersion, T::Type) = T
+accepted_field_type(::SchemaVersion, ::Type{Any}) = Any
 accepted_field_type(::SchemaVersion, ::Type{UUID}) = Union{UUID,UInt128}
 accepted_field_type(::SchemaVersion, ::Type{Symbol}) = Union{Symbol,AbstractString}
 accepted_field_type(::SchemaVersion, ::Type{String}) = AbstractString
 accepted_field_type(sv::SchemaVersion, ::Type{<:Vector{T}}) where T = AbstractVector{<:(accepted_field_type(sv, T))}
 accepted_field_type(::SchemaVersion, ::Type{Vector}) = AbstractVector
+accepted_field_type(sv::SchemaVersion, ::Type{Union{T,Missing}}) where {T} = Union{accepted_field_type(sv, T),Missing}
 
 """
     Legolas.find_violation(ts::Tables.Schema, sv::Legolas.SchemaVersion)
