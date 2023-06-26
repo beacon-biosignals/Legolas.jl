@@ -29,13 +29,15 @@ While it is fairly established practice to [semantically version source code](ht
 
 For example, a schema author must introduce a new schema version for any of the following changes:
 
-- A new type-restricted required field is added to the schema.
+- A new type-restricted required field is added to the schema. *Required* means any field which is specified in the schema declaration, even if it is allowed to be `Missing`. In other words, the addition of any field with a type-restriciton narrow than `Any` is breaking.
 - An existing required field's type restriction is tightened.
 - An existing required field is renamed.
 
 One benefit of Legolas' approach is that multiple schema versions may be defined in the same codebase, e.g. there's nothing that prevents `@version(FooV1, ...)` and `@version(FooV2, ...)` from being defined and utilized simultaneously. The source code that defines any given Legolas schema version and/or consumes/produces Legolas tables is presumably already semantically versioned, such that consumer/producer packages can determine their compatibility with each other in the usual manner via interpreting major/minor/patch increments.
 
 Note that it is preferable to avoid introducing new versions of an existing schema, if possible, in order to minimize code/data churn for downstream producers/consumers. Thus, authors should prefer conservative field type restrictions from the get-go. Remember: loosening a field type restriction is not a breaking change, but tightening one is.
+
+Introducing a new field with a restriction narrower than `Any` is in some sense a tightening of type restrictions and thus breaking because extensions may have already defined that field with an incompatible restriction. 
 
 ## Important Expectations Regarding Custom Field Assignments
 
