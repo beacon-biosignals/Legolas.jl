@@ -342,6 +342,11 @@ abstract type AbstractRecord <: Tables.AbstractRow end
 @inline Tables.columnnames(r::AbstractRecord) = fieldnames(typeof(r))
 @inline Tables.schema(::AbstractVector{R}) where {R<:AbstractRecord} = Tables.Schema(fieldnames(R), fieldtypes(R))
 
+# XXX: this does not work with parametric fields whose types can change!  I
+# think the best thing to do is to define these methods per-record type in the
+# version macro.
+ConstructionBase.constructorof(::Type{T}) where {T<:AbstractRecord} = (args...) -> T(NamedTuple{fieldnames(T)}(args))
+
 """
     Legolas.schema_version_from_record(record::Legolas.AbstractRecord)
 
