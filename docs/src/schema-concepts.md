@@ -29,7 +29,7 @@ While it is fairly established practice to [semantically version source code](ht
 
 For example, a schema author must introduce a new schema version for any of the following changes:
 
-- A new type-restricted required field is added to the schema. *Required* means any field which is specified in the schema declaration, even if it is allowed to be `Missing`. In other words, the addition of any field with a type-restriciton narrow than `Any` is breaking.
+- A new type-restricted required field is added to the schema. *Required* means any field which is specified in the schema declaration, even if it is allowed to be `Missing`. In other words, the addition of any field with a type-restriciton narrower than `Any` is breaking.
 - An existing required field's type restriction is tightened.
 - An existing required field is renamed.
 
