@@ -193,6 +193,7 @@ end
 module Namespace91
     using Test
     using Legolas: @schema, @version, tobuffer, read
+    using Accessors: @set
 
     # Define something else with the name Legolas
     struct Legolas end
@@ -211,6 +212,10 @@ module Namespace91
         @test A91V1(; a=1) == A91V1(; a=1)
         @test isequal(A91V1(; a=1), A91V1(; a=1))
         @test read(tobuffer([A91V1(; a=1)], A91V1SchemaVersion())).a == [1]
+
+        a = A91V1(; a=1)
+        a2 = @set a.a = 2
+        @test a2.a == 2
     end
 end # module
 
