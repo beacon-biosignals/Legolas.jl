@@ -713,5 +713,5 @@ end
 
     n3 = @set n.k = missing
     @test n3 isa NestedV1{Missing}
-
+    @test ismissing(n3.k)
 end

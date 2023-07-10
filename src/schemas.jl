@@ -342,11 +342,6 @@ abstract type AbstractRecord <: Tables.AbstractRow end
 @inline Tables.columnnames(r::AbstractRecord) = fieldnames(typeof(r))
 @inline Tables.schema(::AbstractVector{R}) where {R<:AbstractRecord} = Tables.Schema(fieldnames(R), fieldtypes(R))
 
-# XXX: this does not work with parametric fields whose types can change!  I
-# think the best thing to do is to define these methods per-record type in the
-# version macro.
-ConstructionBase.constructorof(::Type{T}) where {T<:AbstractRecord} = (args...) -> T(NamedTuple{fieldnames(T)}(args))
-
 """
     Legolas.schema_version_from_record(record::Legolas.AbstractRecord)
 
@@ -607,7 +602,13 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
     # generate `inner_constructor_definitions` and `outer_constructor_definitions`
     R = record_type_symbol
     kwargs_from_row = [Expr(:kw, n, :(get(row, $(Base.Meta.quot(n)), missing))) for n in keys(record_fields)]
-    outer_constructor_definitions = :($R(row) = $R(; $(kwargs_from_row...)))
+    outer_constructor_definitions = quote
+        $R(row) = $R(; $(kwargs_from_row...))
+        function $ConstructionBase.constructorof(::Type{<:$R})
+            nt = NamedTuple{$((:($k) for k in keys(record_fields))..., )}
+            (args...) -> $R(nt(args))
+        end
+    end
     if isempty(type_param_defs)
         inner_constructor_definitions = quote
             function $R(; $(field_kwargs...))
