@@ -342,6 +342,23 @@ abstract type AbstractRecord <: Tables.AbstractRow end
 @inline Tables.columnnames(r::AbstractRecord) = fieldnames(typeof(r))
 @inline Tables.schema(::AbstractVector{R}) where {R<:AbstractRecord} = Tables.Schema(fieldnames(R), fieldtypes(R))
 
+# we need a bit of extra work to integrate with ConstructionBase for pre-1.7 due
+# to the overload of `propertynames(::Tables.AbstractRow)`
+#
+# we _could_ overload `check_properties_are_fields` but that's no part of the
+# public API so this is safer
+@static if VERSION < v"1.7"
+    ConstructionBase.getproperties(r::AbstractRecord) = NamedTuple(r)
+    # largely copy-paste from ConstructionBase.setproperties_object:
+    function ConstructionBase.setproperties(r::R, patch::NamedTuple) where {R <: AbstractRecord}
+        nt = ConstructionBase.getproperties(r)
+        nt_new = merge(nt, patch)
+        ConstructionBase.check_patch_properties_exist(nt_new, nt, r, patch)
+        args = Tuple(nt_new) # old julia inference prefers if we wrap in Tuple
+        return ConstructionBase.constructorof(R)(args...)
+    end
+end
+
 """
     Legolas.schema_version_from_record(record::Legolas.AbstractRecord)
 
