@@ -427,7 +427,7 @@ struct DeclaredFieldInfo
 end
 
 # We maintain an alias to the deprecated name for this type, xref https://github.com/beacon-biosignals/Legolas.jl/pull/100
-const RequiredFieldInfo = DeclaredFieldInfo
+Base.@deprecate_binding RequiredFieldInfo DeclaredFieldInfo
 
 Base.:(==)(a::DeclaredFieldInfo, b::DeclaredFieldInfo) = all(getfield(a, i) == getfield(b, i) for i in 1:fieldcount(DeclaredFieldInfo))
 
