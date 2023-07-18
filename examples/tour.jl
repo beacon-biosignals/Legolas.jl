@@ -22,10 +22,9 @@ using Legolas: @schema, @version, complies_with, find_violation, find_violations
 @schema "example.foo" Foo
 
 # The above schema declaration provides the necessary scaffolding to start declaring
-# new *versions* of the `example.foo` schema. Schema version declarations specify the
-# set of required fields that a given table (or row) must contain in order to comply
-# with that schema version. Let's use the `@version` macro to declare an initial
-# version of the `example.foo` schema with some required fields:
+# new *versions* of the `example.foo` schema. Let's use the `@version` macro to declare
+# an initial version of the `example.foo` schema, and in particular, declare the fields
+# that a given table (or row) must contain to comply with this new schema version:
 @version FooV1 begin
     a::Real
     b::String
@@ -40,7 +39,7 @@ end
 # special types that match it. For example, our `@version` declaration above generated:
 #
 # - `FooV1`: A special subtype of `Tables.AbstractRow` whose fields match the corresponding
-#   schema version's declared required fields.
+#   schema version's declared fields.
 # - `FooV1SchemaVersion`: An alias for `Legolas.SchemaVersion` that matches the corresponding
 #   schema version.
 
@@ -63,11 +62,11 @@ end
 # `example.foo@1`.
 
 # For example, all of the following `Tables.Schema`s comply with `example.foo@1`:
-for s in [Tables.Schema((:a, :b, :c, :d), (Real, String, Any, AbstractVector)), # All required fields must be present...
+for s in [Tables.Schema((:a, :b, :c, :d), (Real, String, Any, AbstractVector)), # All fields declared by the schema version must be present...
           Tables.Schema((:a, :b, :c, :d), (Int, String, Float64, Vector)),      # ...and have subtypes that match the schema's declared type constraints.
           Tables.Schema((:b, :a, :d, :c), (String, Int, Vector, Float64)),      # Fields do not have to be in any particular order, as long as they are present.
-          Tables.Schema((:a, :b, :d), (Int, String, Vector)),                   # Fields whose declared type constraints are `>:Missing` may be elided entirely.
-          Tables.Schema((:a, :x, :b, :y, :d), (Int, Any, String, Any, Vector))] # Non-required fields may also be present.
+          Tables.Schema((:a, :b, :d), (Int, String, Vector)),                   # If a declared field is elided, it is implicitly interpreted as present, but `Missing`.
+          Tables.Schema((:a, :x, :b, :y, :d), (Int, Any, String, Any, Vector))] # Non-declared fields may additionally be present.
     # if `complies_with` finds a violation, it returns `false`; returns `true` otherwise
     @test complies_with(s, FooV1SchemaVersion())
 
@@ -85,13 +84,13 @@ end
 
 # ...while the below `Tables.Schema`s do not:
 
-s = Tables.Schema((:a, :c, :d), (Int, Float64, Vector)) # The required non-`>:Missing` field `b::String` is not present.
+s = Tables.Schema((:a, :c, :d), (Int, Float64, Vector)) # The declared field `b::String` is missing.
 @test !complies_with(s, FooV1SchemaVersion())
 @test_throws ArgumentError validate(s, FooV1SchemaVersion())
 @test isequal(find_violation(s, FooV1SchemaVersion()), :b => missing)
 @test isequal(find_violations(s, FooV1SchemaVersion()), [:b => missing])
 
-s = Tables.Schema((:a, :b, :c, :d), (Int, String, Float64, Any)) # The type of required field `d::AbstractVector` is not `<:AbstractVector`.
+s = Tables.Schema((:a, :b, :c, :d), (Int, String, Float64, Any)) # The type of declared field `d` does not match its declared type constraint (`AbstractVector`).
 @test !complies_with(s, FooV1SchemaVersion())
 @test_throws ArgumentError validate(s, FooV1SchemaVersion())
 @test isequal(find_violation(s, FooV1SchemaVersion()), :d => Any)
@@ -99,9 +98,9 @@ s = Tables.Schema((:a, :b, :c, :d), (Int, String, Float64, Any)) # The type of r
 
 # The expectations that characterize Legolas' particular notion of "schematic compliance" - requiring the
 # presence of pre-specified declared fields, assuming non-present fields to be implicitly `missing`, and allowing
-# the presence of non-required fields - were chosen such that the question "Does the table `t` comply with the Legolas
+# the presence of non-declared fields - were chosen such that the question "Does the table `t` comply with the Legolas
 # schema version `s`?" is roughly equivalent to "Can a logical view be trivially constructed atop table `t` that contains
-# only the required fields declared by `s`?". The ability to cleanly ask this question enables a weak notion of "subtyping"
+# only the fields declared by `s`?". The ability to cleanly ask this question enables a weak notion of "subtyping"
 # (see https://en.wikipedia.org/wiki/Duck_typing, https://en.wikipedia.org/wiki/Liskov_substitution_principle) that is
 # core to Legolas' mechanisms for defining, extending, and versioning interfaces to tabular data.
 
@@ -110,7 +109,7 @@ s = Tables.Schema((:a, :b, :c, :d), (Int, String, Float64, Any)) # The type of r
 #####
 
 # As mentioned in this tour's introduction, `FooV1` is a subtype of `Tables.AbstractRow` whose fields are guaranteed to
-# match all the fields required by `example.foo@1`. We refer to such Legolas-generated types as "record types" (see
+# match all the fields declared by `example.foo@1`. We refer to such Legolas-generated types as "record types" (see
 # https://en.wikipedia.org/wiki/Record_(computer_science)). These record types are direct subtypes of
 # `Legolas.AbstractRecord`, which is, itself, a subtype of `Tables.AbstractRow`:
 @test FooV1 <: Legolas.AbstractRecord <: Tables.AbstractRow
@@ -123,18 +122,18 @@ fields = (a=1.0, b="hi", c=π, d=[1, 2, 3])
 # This may seem like a fairly trivial constructor in the preceding example, but it has some properties
 # that can be quite convenient in practice. Specifically, row values provided to `FooV1` may:
 #
-# - ...contain the associated schema version's required fields in any order
-# - ...elide required fields, in which case the constructor will assume them to be `missing`
-# - ...contain any other fields in addition to the required fields; such additional fields are simply ignored
+# - ...contain the associated schema version's declared fields in any order
+# - ...elide declared fields, in which case the constructor will assume them to be `missing`
+# - ...contain any other fields in addition to the declared fields; such additional fields are simply ignored
 #   by the constructor and are not propagated through to the resulting record.
 #
 # Demonstrating a few of these properties:
 
-# Providing the additional non-required field `x` in the input, which is simply ignored:
+# Providing the additional non-declared field `x` in the input, which is simply ignored:
 fields_with_x = (; fields..., x="x")
 @test NamedTuple(FooV1(fields_with_x)) == fields
 
-# Eliding the required field `c`, which is assigned `missing` in the output:
+# Eliding the declared field `c`, which is assigned `missing` in the output:
 foo = FooV1(; a=1.0, b="hi", d=[1, 2, 3])
 @test isequal(NamedTuple(foo), (a=1.0, b="hi", c=missing, d=[1, 2, 3]))
 
@@ -218,8 +217,8 @@ fields = (x=1, y=1)
 ##### Extending Existing Schema Versions
 #####
 
-# New schema versions can inherit other schema version's required fields. Here, we declare `example.baz@1`
-# as an "extension" of `example.bar@1`:
+# New schema versions can inherit other schema version's declared fields as their own. Here, we declare
+# `example.baz@1` as an "extension" of `example.bar@1`:
 @schema "example.baz" Baz
 
 @version BazV1 > BarV1 begin
@@ -228,16 +227,16 @@ fields = (x=1, y=1)
     k::Int64 = ismissing(k) ? length(z) : k
 end
 
-# Notice how the child's `@version` declaration may reference the parent's required fields (but need not reference
-# every single one), may tighten the constraints of the parent's required fields, and may introduce new required
-# fields atop the parent's required fields.
+# Notice how the child's `@version` declaration may reference the parent's declared fields (but need not reference
+# every single one), may tighten the constraints of the parent's declared fields, and may introduce new declared
+# fields atop the declared fields inherited from the parent.
 
 # For a given Legolas schema version extension to be valid, all `Tables.Schema`s that comply with the child
-# must comply with the parent, but the reverse need not be true. We can check a schema version's required fields
-# and their type constraints via `Legolas.required_fields`. Based on these outputs, it is a worthwhile exercise
+# must comply with the parent, but the reverse need not be true. We can check a schema version's declared fields
+# and their type constraints via `Legolas.declared_fields`. Based on these outputs, it is a worthwhile exercise
 # to confirm for yourself that `BazV1SchemaVersion` is a valid extension of `BarV1SchemaVersion` under the aforementioned rule:
-@test Legolas.required_fields(BarV1SchemaVersion()) == (x=Union{Missing,Int8}, y=String, z=String)
-@test Legolas.required_fields(BazV1SchemaVersion()) == (x=Int8, y=String, z=String, k=Int64)
+@test Legolas.declared_fields(BarV1SchemaVersion()) == (x=Union{Missing,Int8}, y=String, z=String)
+@test Legolas.declared_fields(BazV1SchemaVersion()) == (x=Int8, y=String, z=String, k=Int64)
 
 # As a counterexample, the following is invalid, because the declaration of `x::Any` would allow for `x`
 # values that are disallowed by the parent schema version `example.bar@1`:
@@ -263,7 +262,7 @@ end
 
 # One last note on syntax: You might ask "Why use the greater-than symbol as the inheritance operator instead of `<:`?"
 # There are a few reasons. The primary reason is purely historical: earlier versions of Legolas did not as rigorously
-# demand/enforce subtyping relationships between parent and child schemas' required fields, and so the `<:` operator
+# demand/enforce subtyping relationships between parent and child schemas' declared fields, and so the `<:` operator
 # was considered to be a bit too misleading. A secondary reason in favor of `>` was that it implied the actual order
 # of application of constraints (i.e. the parent's are applied before the child's). Lastly, `>` aligns well with the
 # property that child schema versions have a greater number of constraints than their parents.
@@ -294,10 +293,10 @@ fields = (a=1.0, b="b", c=3, d=[1,2,3])
 # https://beacon-biosignals.github.io/Legolas.jl/stable/schema-concepts/#Schema-Versioning:-You-Break-It,-You-Bump-It-1
 
 #####
-##### Parameterizing Required Field Types
+##### Parameterizing Declared Field Types
 #####
 
-# Sometimes, it's useful to surface a required field's type as a type parameter of the generated record type. To
+# Sometimes, it's useful to surface a declared field's type as a type parameter of the generated record type. To
 # achieve this, the `@version` macro supports use of the `<:` operator to mark fields whose types should be exposed
 # as parameters. For example:
 
@@ -316,8 +315,8 @@ end
 @test typeof(ParamV1{Int,Float32}(a=1, b=2.0, c="3", d=1)) === ParamV1{Int,Float32}
 
 # Note that extension schema versions do not implicitly "inherit" their parent's type parameters; if you'd
-# like to parameterize the type of a parent's required field in the child schema version, you should explicitly
-# include the field in the child's required field list:
+# like to parameterize the type of a parent's declared field in the child schema version, you should explicitly
+# include the field in the child's declared field list:
 
 @schema "example.child-param" ChildParam
 
@@ -415,7 +414,7 @@ end
 @test complies_with(Tables.Schema((:id,), (UUID,)), PortableV1SchemaVersion())
 @test complies_with(Tables.Schema((:id,), (UInt128,)), PortableV1SchemaVersion())
 
-# How is this possible? Well, when Legolas checks whether a given field `f::T` matches a required field `f::F`, it doesn't
+# How is this possible? Well, when Legolas checks whether a given field `f::T` matches a declared field `f::F`, it doesn't
 # directly check that `T <: F`; instead, it checks that `T <: Legolas.accepted_field_type(sv, F)` where `sv` is the relevant
 # `SchemaVersion`. The fallback definition of `Legolas.accepted_field_type(::SchemaVersion, F::Type)` is simply `F`, but there
 # are a few other default overloads to support common Base types that can cause portability issues:
