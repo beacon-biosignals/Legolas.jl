@@ -20,7 +20,7 @@ Legolas.name
 Legolas.version
 Legolas.identifier
 Legolas.parent
-Legolas.required_fields
+Legolas.declared_fields
 Legolas.declaration
 Legolas.record_type
 Legolas.schema_version_from_record

@@ -27,11 +27,13 @@ While it is fairly established practice to [semantically version source code](ht
 
 **Do not introduce a change to an existing schema version that might cause existing compliant data to become non-compliant; instead, incorporate the intended change in a new schema version whose version number is one greater than the previous version number.**
 
-For example, a schema author must introduce a new schema version for any of the following changes:
+A schema author must introduce a new schema version if any of the following changes are introduced:
 
-- A new type-restricted required field is added to the schema.
-- An existing required field's type restriction is tightened.
-- An existing required field is renamed.
+- A new type-constrained and/or value-constrained field is declared. In other words, for the introduction of a new declared field to be non-breaking, the new field's type constraint must be `::Any` and it may not feature a value-constraining or value-transforming assignment expression.
+- An existing declared field's type or value constraints are tightened.
+- An existing declared field is renamed.
+
+If any of the above breaking changes are made to an existing schema version, instead of introducing a new schema version, subtle downstream breakage may occur. For example, if a new type/value-constrained field is declared, previously compliant tables containing a field with the same name might accidentally become non-compliant if existing values violate the new constraints. Similarly, downstream schema version extensions may have already declared a field with the same name, but with constraints that are incompatible with the new constraints.
 
 One benefit of Legolas' approach is that multiple schema versions may be defined in the same codebase, e.g. there's nothing that prevents `@version(FooV1, ...)` and `@version(FooV2, ...)` from being defined and utilized simultaneously. The source code that defines any given Legolas schema version and/or consumes/produces Legolas tables is presumably already semantically versioned, such that consumer/producer packages can determine their compatibility with each other in the usual manner via interpreting major/minor/patch increments.
 

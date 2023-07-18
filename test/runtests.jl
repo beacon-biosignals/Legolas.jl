@@ -1,6 +1,6 @@
 using Compat: current_exceptions
 using Legolas, Test, DataFrames, Arrow, UUIDs
-using Legolas: SchemaVersion, @schema, @version, SchemaVersionDeclarationError, RequiredFieldInfo
+using Legolas: SchemaVersion, @schema, @version, SchemaVersionDeclarationError, DeclaredFieldInfo
 using Accessors
 using Aqua
 
@@ -297,8 +297,8 @@ end
 
 @testset "`Legolas.@version` and associated utilities for declared `Legolas.SchemaVersion`s" begin
     @testset "Legolas.SchemaVersionDeclarationError" begin
-        @test_throws SchemaVersionDeclarationError("malformed or missing declaration of required fields") eval(:(@version(NewV1, $(Expr(:block, LineNumberNode(1, :test))))))
-        @test_throws SchemaVersionDeclarationError("malformed or missing declaration of required fields") @version(ChildV2, begin end)
+        @test_throws SchemaVersionDeclarationError("malformed or missing field declaration(s)") eval(:(@version(NewV1, $(Expr(:block, LineNumberNode(1, :test))))))
+        @test_throws SchemaVersionDeclarationError("malformed or missing field declaration(s)") @version(ChildV2, begin end)
         @test_throws SchemaVersionDeclarationError("missing prior `@schema` declaration for `Unknown` in current module") @version(UnknownV1 > ChildV1, begin x end)
         @test_throws SchemaVersionDeclarationError("provided record type symbol is malformed: Child") @version(Child, begin x end)
         @test_throws SchemaVersionDeclarationError("provided record type symbol is malformed: Childv2") @version(Childv2, begin x end)
@@ -342,11 +342,16 @@ end
         @test Legolas.identifier(GrandchildV1SchemaVersion()) == "test.grandchild@1>test.child@1>test.parent@1"
     end
 
-    @testset "Legolas.required_fields" begin
-        @test_throws Legolas.UnknownSchemaVersionError(undeclared) Legolas.required_fields(undeclared)
-        @test Legolas.required_fields(ParentV1SchemaVersion()) == (x=Vector, y=AbstractString)
-        @test Legolas.required_fields(ChildV1SchemaVersion()) == (x=Vector, y=AbstractString, z=Any)
-        @test Legolas.required_fields(GrandchildV1SchemaVersion()) == (x=Vector, y=String, z=Any, a=Int32)
+    @testset "Legolas.declared_fields" begin
+        @test_throws Legolas.UnknownSchemaVersionError(undeclared) Legolas.declared_fields(undeclared)
+        @test Legolas.declared_fields(ParentV1SchemaVersion()) == (x=Vector, y=AbstractString)
+        @test Legolas.declared_fields(ChildV1SchemaVersion()) == (x=Vector, y=AbstractString, z=Any)
+        @test Legolas.declared_fields(GrandchildV1SchemaVersion()) == (x=Vector, y=String, z=Any, a=Int32)
+
+        # xref https://github.com/beacon-biosignals/Legolas.jl/pull/100
+        @test Legolas.declared_fields(ParentV1SchemaVersion()) == (@test_deprecated Legolas.required_fields(ParentV1SchemaVersion()))
+        @test Legolas.declared_fields(ChildV1SchemaVersion()) == (@test_deprecated Legolas.required_fields(ChildV1SchemaVersion()))
+        @test Legolas.declared_fields(GrandchildV1SchemaVersion()) == (@test_deprecated Legolas.required_fields(GrandchildV1SchemaVersion()))
     end
 
     @testset "Legolas.find_violation + Legolas.complies_with + Legolas.validate" begin
@@ -364,7 +369,7 @@ end
                         (ParentV1SchemaVersion(), "test.parent@1"))
             msg = """
                   Tables.Schema violates Legolas schema `$id`:
-                   - Could not find required field: `x`
+                   - Could not find declared field: `x`
                   Provided Tables.Schema:
                    :a  Int32
                    :y  String
@@ -382,8 +387,8 @@ end
                         (ParentV1SchemaVersion(), "test.parent@1"))
             msg = """
                   Tables.Schema violates Legolas schema `$id`:
-                   - Could not find required field: `x`
-                   - Could not find required field: `y`
+                   - Could not find declared field: `x`
+                   - Could not find declared field: `y`
                   Provided Tables.Schema:
                    :a  Int32
                    :z  Any"""
@@ -398,7 +403,7 @@ end
         let s = GrandchildV1SchemaVersion()
             msg = """
             Tables.Schema violates Legolas schema `test.grandchild@1`:
-             - Could not find required field: `x`
+             - Could not find declared field: `x`
              - Incorrect type: `y` expected `<:String`, found `Bool`
             Provided Tables.Schema:
              :y  Bool
@@ -432,11 +437,12 @@ end
 
     @testset "Legolas.declaration" begin
         @test_throws Legolas.UnknownSchemaVersionError(undeclared) Legolas.declaration(undeclared)
-        @test Legolas.declaration(ParentV1SchemaVersion()) == ("test.parent@1" => [RequiredFieldInfo(:x, :Vector, false, :(x::Vector = x)),
-                                                                                   RequiredFieldInfo(:y, :AbstractString, false, :(y::AbstractString = y))])
-        @test Legolas.declaration(ChildV1SchemaVersion()) == ("test.child@1>test.parent@1" => [RequiredFieldInfo(:z, :Any, false, :(z::Any = z))])
-        @test Legolas.declaration(GrandchildV1SchemaVersion()) == ("test.grandchild@1>test.child@1" => [RequiredFieldInfo(:a, :Int32, false, :(a::Int32 = round(Int32, a))),
-                                                                                                        RequiredFieldInfo(:y, :String, false, :(y::String = string(y[1:2])))])
+        @test Legolas.declaration(ParentV1SchemaVersion()) == ("test.parent@1" => [DeclaredFieldInfo(:x, :Vector, false, :(x::Vector = x)),
+                                                                                   DeclaredFieldInfo(:y, :AbstractString, false, :(y::AbstractString = y))])
+        @test Legolas.declaration(ChildV1SchemaVersion()) == ("test.child@1>test.parent@1" => [DeclaredFieldInfo(:z, :Any, false, :(z::Any = z))])
+        @test Legolas.declaration(GrandchildV1SchemaVersion()) == ("test.grandchild@1>test.child@1" => [DeclaredFieldInfo(:a, :Int32, false, :(a::Int32 = round(Int32, a))),
+                                                                                                        DeclaredFieldInfo(:y, :String, false, :(y::String = string(y[1:2])))])
+        @test Legolas.DeclaredFieldInfo === Legolas.RequiredFieldInfo # xref https://github.com/beacon-biosignals/Legolas.jl/pull/100
     end
 
     @testset "Legolas.record_type" begin
