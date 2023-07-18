@@ -352,6 +352,7 @@ abstract type AbstractRecord <: Tables.AbstractRow end
 @static if VERSION < v"1.7"
     ConstructionBase.getproperties(r::AbstractRecord) = NamedTuple(r)
     # largely copy-paste from ConstructionBase.setproperties_object:
+    # https://github.com/JuliaObjects/ConstructionBase.jl/blob/cd24e541fd90ab54d2ee12ddd6ccd229be9a5f1e/src/ConstructionBase.jl#L211-L218
     function ConstructionBase.setproperties(r::R, patch::NamedTuple) where {R <: AbstractRecord}
         nt = ConstructionBase.getproperties(r)
         nt_new = merge(nt, patch)
