@@ -711,6 +711,7 @@ end
     @test p2.y == "okay"
     @test p2 !== p
     @test p2.x === p.x
+    @test p2.y != p.y
 
     e = ArgumentError("Invalid value set for field `y`, expected AbstractString, got a value of type Int64 (1)")
     @test_throws e @set p.y = 1
@@ -718,9 +719,10 @@ end
     n = NestedV1(; gc=GrandchildV1(; x=[1,2], y="hello", z=nothing, a=1), k=:okay)
     n2 = @set n.gc.z = "yay!"
     @test n2.gc.z == "yay!"
-    @test n2.gc !== n.gc
+    @test n2.gc != n.gc
     # parametric on :k
-    @test typeof(n) == typeof(n2)
+    @test typeof(n2) == typeof(n)
+    @test n2.k === n.k
 
     n3 = @set n.k = missing
     @test n3 isa NestedV1{Missing}
