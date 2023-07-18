@@ -1,12 +1,20 @@
 using Compat: current_exceptions
 using Legolas, Test, DataFrames, Arrow, UUIDs
 using Legolas: SchemaVersion, @schema, @version, SchemaVersionDeclarationError, DeclaredFieldInfo
+using Accessors
+using Aqua
 
 @test_throws SchemaVersionDeclarationError("no prior `@schema` declaration found in current module") @version(TestV1, begin x end)
 
 # Isolate schema defined in the tour from the rest of the tests
 module Tour
     include(joinpath(dirname(@__DIR__), "examples", "tour.jl"))
+end
+
+@testset "aqua" begin
+    # picks up ambiguities in dependencies, and one hit for unbound type
+    # parameters for `accepted_field_type(::SchemaVersion, ::Type{Union{Missing,T}})`
+    Aqua.test_all(Legolas; ambiguities=false, unbound_args=false)
 end
 
 @testset "Legolas.lift" begin
@@ -185,6 +193,7 @@ end
 module Namespace91
     using Test
     using Legolas: @schema, @version, tobuffer, read
+    using Accessors: @set
 
     # Define something else with the name Legolas
     struct Legolas end
@@ -203,6 +212,10 @@ module Namespace91
         @test A91V1(; a=1) == A91V1(; a=1)
         @test isequal(A91V1(; a=1), A91V1(; a=1))
         @test read(tobuffer([A91V1(; a=1)], A91V1SchemaVersion())).a == [1]
+
+        a = A91V1(; a=1)
+        a2 = @set a.a = 2
+        @test a2.a == 2
     end
 end # module
 
@@ -685,4 +698,33 @@ end
         e = ArgumentError("Invalid value set for field `a`, expected Integer, got a value of type String (\"foo-bar\")")
         @test_throws e FieldErrorV3(; a="foo bar")
     end
+end
+
+#####
+##### ConstructionBase/Accessors integration
+#####
+
+@testset "ConstructionBase/Accessors integration" begin
+    p = ParentV1(; x=[1,2,3], y="hello")
+    p2 = @set p.y = "okay"
+    @test p2 isa ParentV1
+    @test p2.y == "okay"
+    @test p2 !== p
+    @test p2.x === p.x
+    @test p2.y != p.y
+
+    e = ArgumentError("Invalid value set for field `y`, expected AbstractString, got a value of type Int64 (1)")
+    @test_throws e @set p.y = 1
+
+    n = NestedV1(; gc=GrandchildV1(; x=[1,2], y="hello", z=nothing, a=1), k=:okay)
+    n2 = @set n.gc.z = "yay!"
+    @test n2.gc.z == "yay!"
+    @test n2.gc != n.gc
+    # parametric on :k
+    @test typeof(n2) == typeof(n)
+    @test n2.k === n.k
+
+    n3 = @set n.k = missing
+    @test n3 isa NestedV1{Missing}
+    @test ismissing(n3.k)
 end
