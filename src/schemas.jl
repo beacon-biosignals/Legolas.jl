@@ -777,7 +777,7 @@ Note that this macro expects to be evaluated within top-level scope.
 For more details and examples, please see `Legolas.jl/examples/tour.jl` and the
 "Schema-Related Concepts/Conventions" section of the Legolas.jl documentation.
 """
-macro version(record_type, declared_fields_block)
+macro version(record_type, declared_fields_block=nothing)
     # parse `record_type`
     if record_type isa Symbol
         parent_record_type = nothing
@@ -798,7 +798,6 @@ macro version(record_type, declared_fields_block)
     if declared_fields_block isa Expr && declared_fields_block.head == :block && !isempty(declared_fields_block.args)
         declared_field_statements = [f for f in declared_fields_block.args if !(f isa LineNumberNode)]
     end
-    isempty(declared_field_statements) && return :(throw(SchemaVersionDeclarationError("malformed or missing field declaration(s)")))
     declared_field_infos = DeclaredFieldInfo[]
     for stmt in declared_field_statements
         original_stmt = Base.Meta.quot(deepcopy(stmt))
@@ -817,7 +816,7 @@ macro version(record_type, declared_fields_block)
         msg = string("cannot have field name which start with an underscore in `@version` declaration: ", invalid_field_names)
         return :(throw(SchemaVersionDeclarationError($msg)))
     end
-    declared_field_names_types = Expr(:tuple, (:($(f.name) = $(esc(f.type))) for f in declared_field_infos)...)
+    declared_field_names_types = Expr(:tuple, Expr(:parameters, (Expr(:kw, f.name, esc(f.type)) for f in declared_field_infos)...))
 
     return quote
         if !isdefined((@__MODULE__), :__legolas_schema_name_from_prefix__)
