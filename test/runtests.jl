@@ -516,9 +516,7 @@ end
         c = ChildV1(; x=[1, 2], y="hello", z=missing)
         @test isequal(c, c)
         @test ismissing(c == c)
-        if UInt === UInt64  # value will be different depending on system word size
-            @test hash(c) === 0x07055951b3aa478e
-        end
+        @test hash(c) isa UInt  # NOTE: can't rely on particular values
     end
 end
 
