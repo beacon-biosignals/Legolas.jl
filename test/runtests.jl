@@ -511,6 +511,15 @@ end
         @test_throws TypeError ParamV1(; i=1.0)
         @test_throws ArgumentError ParamV1{Int}(; i=1.1)
     end
+
+    @testset "equality and hashing" begin
+        c = ChildV1(; x=[1, 2], y="hello", z=missing)
+        @test isequal(c, c)
+        @test ismissing(c == c)
+        if UInt === UInt64  # value will be different depending on system word size
+            @test hash(c) === 0x07055951b3aa478e
+        end
+    end
 end
 
 @testset "miscellaneous Legolas/src/tables.jl tests" begin

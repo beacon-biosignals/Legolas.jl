@@ -660,17 +660,6 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
         end
     end
 
-    # generate `base_overload_definitions`
-    equal_rhs_statement = foldr((x, y) -> :($x && $y), (:(a.$f == b.$f) for f in keys(record_fields)))
-    isequal_rhs_statement = foldr((x, y) -> :($x && $y), (:(isequal(a.$f, b.$f)) for f in keys(record_fields)))
-    hash_rhs_statement = foldr((x, y) -> :(hash($x, $y)), (:(r.$f) for f in keys(record_fields)); init=:h)
-    base_overload_definitions = quote
-        Base.:(==)(a::$R, b::$R) = $equal_rhs_statement
-        Base.isequal(a::$R, b::$R) = $isequal_rhs_statement
-        Base.hash(r::$R, h::UInt) = hash($R, $hash_rhs_statement)
-        Base.NamedTuple(r::$R) = (; $((:(r.$f) for f in keys(record_fields))...))
-    end
-
     # generate `arrow_overload_definitions`
     record_type_arrow_name = string("JuliaLang.Legolas.Generated.", Legolas.name(schema_version), '.', Legolas.version(schema_version))
     record_type_arrow_name = Base.Meta.quot(Symbol(record_type_arrow_name))
@@ -689,7 +678,6 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
             $inner_constructor_definitions
         end
         $outer_constructor_definitions
-        $base_overload_definitions
         $arrow_overload_definitions
         $Legolas.record_type(::$(Base.Meta.quot(typeof(schema_version)))) = $R
         $Legolas.schema_version_from_record(::$R) = $schema_version
@@ -862,4 +850,28 @@ macro version(record_type, declared_fields_block)
         end
         nothing
     end
+end
+
+#####
+##### Base overload definitions
+#####
+
+function Base.:(==)(x::T, y::T) where {T<:AbstractRecord}
+    return all(i -> getfield(x, i) == getfield(y, i), 1:fieldcount(T))
+end
+
+function Base.isequal(x::T, y::T) where {T<:AbstractRecord}
+    return all(i -> isequal(getfield(x, i), getfield(y, i)), 1:fieldcount(T))
+end
+
+function Base.hash(r::AbstractRecord, h::UInt)
+    for i in nfields(r):-1:1
+        h = hash(getfield(r, i), h)
+    end
+    return hash(typeof(r), h)
+end
+
+function Base.NamedTuple(r::AbstractRecord)
+    names = fieldnames(typeof(r))
+    return NamedTuple{names}(map(x -> getfield(r, x), names))
 end
