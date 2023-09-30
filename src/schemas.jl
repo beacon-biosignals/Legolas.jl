@@ -856,12 +856,19 @@ end
 ##### Base overload definitions
 #####
 
-function Base.:(==)(x::T, y::T) where {T<:AbstractRecord}
-    return all(i -> getfield(x, i) == getfield(y, i), 1:fieldcount(T))
+_typeof(r::AbstractRecord) = Base.unwrap_unionall(Base.typename(typeof(r)).wrapper)
+
+_type_equal(x::R, y::R) where {R<:AbstractRecord} = true
+_type_equal(x::AbstractRecord, y::AbstractRecord) = _typeof(x) === _typeof(y)
+
+function Base.:(==)(x::AbstractRecord, y::AbstractRecord)
+    _type_equal(x, y) || return false
+    return all(i -> getfield(x, i) == getfield(y, i), 1:nfields(x))
 end
 
-function Base.isequal(x::T, y::T) where {T<:AbstractRecord}
-    return all(i -> isequal(getfield(x, i), getfield(y, i)), 1:fieldcount(T))
+function Base.isequal(x::AbstractRecord, y::AbstractRecord)
+    _type_equal(x, y) || return false
+    return all(i -> isequal(getfield(x, i), getfield(y, i)), 1:nfields(x))
 end
 
 function Base.hash(r::AbstractRecord, h::UInt)

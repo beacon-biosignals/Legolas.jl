@@ -526,6 +526,8 @@ end
         @test hash(c) isa UInt  # NOTE: can't rely on particular values
         @test UnionMissingV1(; a=missing, b=1) != UnionMissingV1(; a=missing, b=2)
         @test !isequal(UnionMissingV1(; a=missing, b=1), UnionMissingV1(; a=missing, b=2))
+        @test ParamV1(; i=one(Int32)) == ParamV1(; i=one(Int64))
+        @test isequal(ParamV1(; i=one(Int32)), ParamV1(; i=one(Int64)))
     end
 end
 
