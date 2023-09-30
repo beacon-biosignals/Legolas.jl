@@ -447,7 +447,7 @@ end
 # We maintain an alias to the deprecated name for this type, xref https://github.com/beacon-biosignals/Legolas.jl/pull/100
 Base.@deprecate_binding RequiredFieldInfo DeclaredFieldInfo
 
-Base.:(==)(a::DeclaredFieldInfo, b::DeclaredFieldInfo) = all(getfield(a, i) == getfield(b, i) for i in 1:fieldcount(DeclaredFieldInfo))
+Base.:(==)(a::DeclaredFieldInfo, b::DeclaredFieldInfo) = _compare_fields(==, a, b)
 
 function _parse_declared_field_info!(f)
     f isa Symbol && (f = Expr(:(::), f, :Any))
@@ -856,20 +856,24 @@ end
 ##### Base overload definitions
 #####
 
-_typeof(r::AbstractRecord) = record_type(schema_version_from_record(r))
-
-_type_equal(x::R, y::R) where {R<:AbstractRecord} = true
-_type_equal(x::AbstractRecord, y::AbstractRecord) = _typeof(x) === _typeof(y)
-
-function Base.:(==)(x::AbstractRecord, y::AbstractRecord)
-    _type_equal(x, y) || return false
-    return all(i -> getfield(x, i) == getfield(y, i), 1:nfields(x))
+# Field-wise comparison for any two objects with exactly the same type. Most record
+# comparisons will hit this method.
+function _compare_fields(eq, x::T, y::T) where {T}
+    return all(i -> eq(getfield(x, i), getfield(y, i)), 1:fieldcount(T))
 end
 
-function Base.isequal(x::AbstractRecord, y::AbstractRecord)
-    _type_equal(x, y) || return false
-    return all(i -> isequal(getfield(x, i), getfield(y, i)), 1:nfields(x))
+# Field-wise comparison of two arbitrary records, with equality contingent on matching
+# schemas. Record comparisons for parametric record types with mismatched type parameters
+# will hit this method, as well as mismatched record types (which will not compare equal).
+function _compare_fields(eq, x::AbstractRecord, y::AbstractRecord)
+    svx = schema_version_from_record(x)
+    svy = schema_version_from_record(y)
+    return svx === svy && all(i -> eq(getfield(x, i), getfield(y, i)), 1:nfields(x))
 end
+
+Base.:(==)(x::AbstractRecord, y::AbstractRecord) = _compare_fields(==, x, y)
+
+Base.isequal(x::AbstractRecord, y::AbstractRecord) = _compare_fields(isequal, x, y)
 
 function Base.hash(r::AbstractRecord, h::UInt)
     for i in nfields(r):-1:1
