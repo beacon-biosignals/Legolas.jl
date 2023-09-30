@@ -856,7 +856,7 @@ end
 ##### Base overload definitions
 #####
 
-_typeof(r::AbstractRecord) = Base.unwrap_unionall(Base.typename(typeof(r)).wrapper)
+_typeof(r::AbstractRecord) = record_type(schema_version_from_record(r))
 
 _type_equal(x::R, y::R) where {R<:AbstractRecord} = true
 _type_equal(x::AbstractRecord, y::AbstractRecord) = _typeof(x) === _typeof(y)
