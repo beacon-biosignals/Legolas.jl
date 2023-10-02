@@ -526,10 +526,18 @@ end
         @test isequal(a, b)
         @test ismissing(a == b)
         @test hash(a) == hash(b)
-        @test UnionMissingV1(; a=missing, b=1) != UnionMissingV1(; a=missing, b=2)
-        @test !isequal(UnionMissingV1(; a=missing, b=1), UnionMissingV1(; a=missing, b=2))
-        @test ParamV1(; i=one(Int32)) == ParamV1(; i=one(Int64))
-        @test isequal(ParamV1(; i=one(Int32)), ParamV1(; i=one(Int64)))
+        u1 = UnionMissingV1(; a=missing, b=1)
+        u2 = UnionMissingV1(; a=missing, b=2)
+        @test u1 != u2
+        @test !isequal(u1, u2)
+        p32 = ParamV1(; i=one(Int32))
+        p64 = ParamV1(; i=one(Int64))
+        @test p32 == p64
+        @test isequal(p32, p64)
+        🧑 = ParentV1(; x=[4, 20], y="")
+        🧒 = ChildV1(; x=[4, 20], y="", z=missing)
+        @test 🧑 != 🧒
+        @test !isequal(🧑, 🧒)
     end
 end
 
