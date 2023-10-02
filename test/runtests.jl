@@ -520,10 +520,12 @@ end
     end
 
     @testset "equality and hashing" begin
-        c = ChildV1(; x=[1, 2], y="hello", z=missing)
-        @test isequal(c, c)
-        @test ismissing(c == c)
-        @test hash(c) isa UInt  # NOTE: can't rely on particular values
+        a = ChildV1(; x=[1, 2], y="hello", z=missing)
+        b = ChildV1(; x=[1, 2], y="hello", z=missing)
+        @test a !== b
+        @test isequal(a, b)
+        @test ismissing(a == b)
+        @test hash(a) == hash(b)
         @test UnionMissingV1(; a=missing, b=1) != UnionMissingV1(; a=missing, b=2)
         @test !isequal(UnionMissingV1(; a=missing, b=1), UnionMissingV1(; a=missing, b=2))
         @test ParamV1(; i=one(Int32)) == ParamV1(; i=one(Int64))
