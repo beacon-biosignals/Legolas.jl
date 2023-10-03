@@ -295,6 +295,13 @@ end
     xs::Union{Vector{String},Missing}
 end
 
+@schema "test.union-missing" UnionMissing
+
+@version UnionMissingV1 begin
+    a::Union{Int,Missing}
+    b::Union{Int,Missing}
+end
+
 @testset "`Legolas.@version` and associated utilities for declared `Legolas.SchemaVersion`s" begin
     @testset "Legolas.SchemaVersionDeclarationError" begin
         @test_throws SchemaVersionDeclarationError("malformed or missing field declaration(s)") eval(:(@version(NewV1, $(Expr(:block, LineNumberNode(1, :test))))))
@@ -510,6 +517,27 @@ end
         @test_throws TypeError ParamV1{Float64}(; i=1)
         @test_throws TypeError ParamV1(; i=1.0)
         @test_throws ArgumentError ParamV1{Int}(; i=1.1)
+    end
+
+    @testset "equality and hashing" begin
+        a = ChildV1(; x=[1, 2], y="hello", z=missing)
+        b = ChildV1(; x=[1, 2], y="hello", z=missing)
+        @test a !== b
+        @test isequal(a, b)
+        @test ismissing(a == b)
+        @test hash(a) == hash(b)
+        u1 = UnionMissingV1(; a=missing, b=1)
+        u2 = UnionMissingV1(; a=missing, b=2)
+        @test u1 != u2
+        @test !isequal(u1, u2)
+        p32 = ParamV1(; i=one(Int32))
+        p64 = ParamV1(; i=one(Int64))
+        @test p32 == p64
+        @test isequal(p32, p64)
+        🧑 = ParentV1(; x=[4, 20], y="")
+        🧒 = ChildV1(; x=[4, 20], y="", z=missing)
+        @test 🧑 != 🧒
+        @test !isequal(🧑, 🧒)
     end
 end
 
