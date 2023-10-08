@@ -236,6 +236,9 @@ end
     y::String = string(y[1:2])
 end
 
+@schema "test.great-grandchild" GreatGrandchild
+@version GreatGrandchildV1 > GrandchildV1
+
 @schema "test.nested" Nested
 @version NestedV1 begin
     gc::GrandchildV1
@@ -302,10 +305,12 @@ end
     b::Union{Int,Missing}
 end
 
+@schema "test.empty-inside" EmptyInside
+
+@version EmptyInsideV1
+
 @testset "`Legolas.@version` and associated utilities for declared `Legolas.SchemaVersion`s" begin
     @testset "Legolas.SchemaVersionDeclarationError" begin
-        @test_throws SchemaVersionDeclarationError("malformed or missing field declaration(s)") eval(:(@version(NewV1, $(Expr(:block, LineNumberNode(1, :test))))))
-        @test_throws SchemaVersionDeclarationError("malformed or missing field declaration(s)") @version(ChildV2, begin end)
         @test_throws SchemaVersionDeclarationError("missing prior `@schema` declaration for `Unknown` in current module") @version(UnknownV1 > ChildV1, begin x end)
         @test_throws SchemaVersionDeclarationError("provided record type symbol is malformed: Child") @version(Child, begin x end)
         @test_throws SchemaVersionDeclarationError("provided record type symbol is malformed: Childv2") @version(Childv2, begin x end)
@@ -332,7 +337,7 @@ end
 
     @testset "Legolas.declared" begin
         @test !Legolas.declared(undeclared)
-        @test all(Legolas.declared, (ParentV1SchemaVersion(), ChildV1SchemaVersion(), GrandchildV1SchemaVersion()))
+        @test all(Legolas.declared, (ParentV1SchemaVersion(), ChildV1SchemaVersion(), GrandchildV1SchemaVersion(), GreatGrandchildV1SchemaVersion()))
     end
 
     @testset "Legolas.parent" begin
@@ -340,6 +345,7 @@ end
         @test isnothing(Legolas.parent(ParentV1SchemaVersion()))
         @test Legolas.parent(ChildV1SchemaVersion()) == ParentV1SchemaVersion()
         @test Legolas.parent(GrandchildV1SchemaVersion()) == ChildV1SchemaVersion()
+        @test Legolas.parent(GreatGrandchildV1SchemaVersion()) == GrandchildV1SchemaVersion()
     end
 
     @testset "Legolas.identifier" begin
@@ -347,13 +353,16 @@ end
         @test Legolas.identifier(ParentV1SchemaVersion()) == "test.parent@1"
         @test Legolas.identifier(ChildV1SchemaVersion()) == "test.child@1>test.parent@1"
         @test Legolas.identifier(GrandchildV1SchemaVersion()) == "test.grandchild@1>test.child@1>test.parent@1"
+        @test Legolas.identifier(GreatGrandchildV1SchemaVersion()) == "test.great-grandchild@1>test.grandchild@1>test.child@1>test.parent@1"
     end
 
     @testset "Legolas.declared_fields" begin
         @test_throws Legolas.UnknownSchemaVersionError(undeclared) Legolas.declared_fields(undeclared)
+        @test Legolas.declared_fields(EmptyInsideV1SchemaVersion()) == NamedTuple()
         @test Legolas.declared_fields(ParentV1SchemaVersion()) == (x=Vector, y=AbstractString)
         @test Legolas.declared_fields(ChildV1SchemaVersion()) == (x=Vector, y=AbstractString, z=Any)
         @test Legolas.declared_fields(GrandchildV1SchemaVersion()) == (x=Vector, y=String, z=Any, a=Int32)
+        @test Legolas.declared_fields(GreatGrandchildV1SchemaVersion()) == (x=Vector, y=String, z=Any, a=Int32)
 
         # xref https://github.com/beacon-biosignals/Legolas.jl/pull/100
         @test Legolas.declared_fields(ParentV1SchemaVersion()) == (@test_deprecated Legolas.required_fields(ParentV1SchemaVersion()))
@@ -365,6 +374,8 @@ end
         @test_throws Legolas.UnknownSchemaVersionError(undeclared) Legolas.validate(Tables.Schema((:a, :b), (Int, Int)), undeclared)
         @test_throws Legolas.UnknownSchemaVersionError(undeclared) Legolas.complies_with(Tables.Schema((:a, :b), (Int, Int)), undeclared)
         @test_throws Legolas.UnknownSchemaVersionError(undeclared) Legolas.find_violation(Tables.Schema((:a, :b), (Int, Int)), undeclared)
+
+        @test Legolas.complies_with(Tables.Schema((), ()), EmptyInsideV1SchemaVersion())
 
         # Note that many of the basic properties of `find_violation`/`complies_with`/`validate`
         # are unit-tested in `examples/tour.jl`; thus, we focus here on testing that these
@@ -389,7 +400,8 @@ end
 
         # Multiple missing field violations
         t = Tables.Schema((:a, :z), (Int32, Any))
-        for (s, id) in ((GrandchildV1SchemaVersion(), "test.grandchild@1"),
+        for (s, id) in ((GreatGrandchildV1SchemaVersion(), "test.great-grandchild@1"),
+                        (GrandchildV1SchemaVersion(), "test.grandchild@1"),
                         (ChildV1SchemaVersion(), "test.child@1"),
                         (ParentV1SchemaVersion(), "test.parent@1"))
             msg = """
@@ -449,6 +461,7 @@ end
         @test Legolas.declaration(ChildV1SchemaVersion()) == ("test.child@1>test.parent@1" => [DeclaredFieldInfo(:z, :Any, false, :(z::Any = z))])
         @test Legolas.declaration(GrandchildV1SchemaVersion()) == ("test.grandchild@1>test.child@1" => [DeclaredFieldInfo(:a, :Int32, false, :(a::Int32 = round(Int32, a))),
                                                                                                         DeclaredFieldInfo(:y, :String, false, :(y::String = string(y[1:2])))])
+        @test Legolas.declaration(GreatGrandchildV1SchemaVersion()) == ("test.great-grandchild@1>test.grandchild@1" => DeclaredFieldInfo[])
         @test Legolas.DeclaredFieldInfo === Legolas.RequiredFieldInfo # xref https://github.com/beacon-biosignals/Legolas.jl/pull/100
     end
 
@@ -457,6 +470,7 @@ end
         @test Legolas.record_type(ParentV1SchemaVersion()) == ParentV1
         @test Legolas.record_type(ChildV1SchemaVersion()) == ChildV1
         @test Legolas.record_type(GrandchildV1SchemaVersion()) == GrandchildV1
+        @test Legolas.record_type(GreatGrandchildV1SchemaVersion()) == GreatGrandchildV1
     end
 
     r0 = (x=[42], y="foo", z=:three, a=1.3)
