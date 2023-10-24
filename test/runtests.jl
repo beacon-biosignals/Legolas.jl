@@ -324,7 +324,6 @@ end
         @test_throws SchemaVersionDeclarationError("provided record type expression is malformed: BobV1 < DaveV1") @version(BobV1 < DaveV1, begin x end)
         @test_throws SchemaVersionDeclarationError("cannot have duplicate field names in `@version` declaration; received: $([:x, :y, :x, :z])") @version(ChildV2, begin x; y; x; z end)
         @test_throws SchemaVersionDeclarationError("cannot have field name which start with an underscore in `@version` declaration: $([:_X])") @version(ChildV2, begin x; X; _X end)
-        @test_throws SchemaVersionDeclarationError("cannot extend from another version of the same schema") @version(ChildV2 > ChildV1, begin x end)
         @test_throws SchemaVersionDeclarationError("declared field types violate parent's field types") @version(NewV1 > ParentV1, begin y::Int end)
         @test_throws SchemaVersionDeclarationError("declared field types violate parent's field types") @version(NewV1 > ChildV1, begin y::Int end)
         @test_throws SchemaVersionDeclarationError("invalid redeclaration of existing schema version; all `@version` redeclarations must exactly match previous declarations") @version(ParentV1, begin x; y end)

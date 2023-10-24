@@ -836,8 +836,6 @@ macro version(record_type, declared_fields_block=nothing)
 
             if $Legolas.declared(schema_version) && $Legolas.declaration(schema_version) != schema_version_declaration
                 throw(SchemaVersionDeclarationError("invalid redeclaration of existing schema version; all `@version` redeclarations must exactly match previous declarations"))
-            elseif parent isa $Legolas.SchemaVersion && $Legolas.name(parent) == schema_name
-                throw(SchemaVersionDeclarationError("cannot extend from another version of the same schema"))
             elseif parent isa $Legolas.SchemaVersion && !($Legolas._has_valid_child_field_types($declared_field_names_types, $Legolas.declared_fields(parent)))
                 throw(SchemaVersionDeclarationError("declared field types violate parent's field types"))
             else
