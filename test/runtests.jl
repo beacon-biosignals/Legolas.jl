@@ -309,6 +309,12 @@ end
 
 @version EmptyInsideV1
 
+@schema "test.missing" MissingOnly
+
+@version MissingOnlyV1 begin
+    i::Missing
+end
+
 @testset "`Legolas.@version` and associated utilities for declared `Legolas.SchemaVersion`s" begin
     @testset "Legolas.SchemaVersionDeclarationError" begin
         @test_throws SchemaVersionDeclarationError("missing prior `@schema` declaration for `Unknown` in current module") @version(UnknownV1 > ChildV1, begin x end)
@@ -552,6 +558,11 @@ end
         🧒 = ChildV1(; x=[4, 20], y="", z=missing)
         @test 🧑 != 🧒
         @test !isequal(🧑, 🧒)
+    end
+
+    @testset "strict Missing validation" begin
+        row = MissingOnlyV1()
+        @test Legolas.complies_with(Tables.schema([row]), MissingOnlyV1SchemaVersion())
     end
 end
 

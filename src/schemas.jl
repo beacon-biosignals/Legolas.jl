@@ -262,6 +262,7 @@ accepted_field_type(::SchemaVersion, ::Type{String}) = AbstractString
 accepted_field_type(sv::SchemaVersion, ::Type{<:Vector{T}}) where T = AbstractVector{<:(accepted_field_type(sv, T))}
 accepted_field_type(::SchemaVersion, ::Type{Vector}) = AbstractVector
 accepted_field_type(sv::SchemaVersion, ::Type{Union{T,Missing}}) where {T} = Union{accepted_field_type(sv, T),Missing}
+accepted_field_type(::SchemaVersion, ::Type{Missing}) = Missing
 
 """
     Legolas.find_violation(ts::Tables.Schema, sv::Legolas.SchemaVersion)
