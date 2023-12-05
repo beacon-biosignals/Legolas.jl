@@ -424,3 +424,94 @@ end
 #
 # Schema version authors should feel free to override these `Legolas.accepted_field_type` definitions (and/or add new definitions)
 # for their own `SchemaVersion` types.
+
+#####
+##### Multiple Inheritance
+#####
+
+@schema "example.overlapping" Overlapping
+
+# fields overlap with both BazV1 and FooV2, but it extends neither
+@version OverlappingV1 begin
+    c::Union{Int64,Float64}
+    y::String
+    k::Int64
+    o::String
+end
+
+@schema "example.mult" Mult
+
+@version MultV1 > [BazV1, OverlappingV1, FooV2] begin
+    # inherited fields:
+    # x::Int8 (BazV1)
+    # y::String (BazV1×OverlappingV1)
+    # z::String (BazV1)
+    # k::Int64 (BazV1×OverlappingV1)
+    # c::Int64 (OverlappingV1×FooV2)
+    # o::String (OverlappingV1)
+    # a::Float64 (FooV2)
+    # b::String (FooV2)
+    # d::Vector (FooV2)
+    m::String
+end
+
+# `MultV1`'s generated constructor looks roughly like:
+#
+#   function MultV1(; a=missing, b=missing, c=missing, d=missing,
+#                   x=missing, y=missing, z=missing, k=missing,
+#                   o=missing, m=missing)
+#       __p__ = Baz1(; x, y, z, k)
+#       x, y, z, k = __p__.x, __p__.y, __p__.z, __p__.k
+#       __p__ = OverlappingV1(; c, y, k, o)
+#       c, y, k, o = __p__.c, __p__.y, __p__.k, __p__.o
+#       __p__ = FooV2(; a, b, c, d)
+#       a, b, c, d = __p__.a, __p__.b, __p__.c, __p__.d
+#       m::String = m
+#       return new(x, y, z, k, c, o, a, b, d, m)
+#   end
+
+@test MultV1(; a=1.0, b="b", c=3, d=["d"], x=Int8(5), y="y", z="z", k=8, o="o", m="m") isa MultV1
+
+#=
+# properly throws an error, since FooV2 cannot be a "downstream coparent" of OverlappingV1
+@schema "example.incompatible" Incompatible
+@version IncompatibleV1 > [BazV1, FooV2, OverlappingV1] begin
+    m::String
+end
+=#
+
+#=
+# properly throws an error, since you can't extend an earlier version of the same schema
+@version MultV2 > [BazV1, OverlappingV1, MultV1, FooV2] begin
+    m::String
+end
+=#
+
+#=
+# check that fan in/out hiearchy works
+
+@schema "example.fan-root" FanRoot
+@version FanRootV1 begin
+    x
+end
+
+@schema "example.fan-left" FanLeft
+@version FanLeftV1 > FanRootV1 begin
+    # TODO
+end
+
+@schema "example.fan-middle" FanMiddle
+@version FanMiddleV1 > FanRootV1 begin
+    # TODO
+end
+
+@schema "example.fan-right" FanRight
+@version FanRightV1 > FanRootV1 begin
+    # TODO
+end
+
+@schema "example.fan-child" FanChild
+@version FanChildV1 > [FanLeftV1, FanMiddleV1, FanRightV1] begin
+    # TODO
+end
+=#
