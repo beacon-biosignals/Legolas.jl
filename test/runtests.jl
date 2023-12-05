@@ -315,6 +315,20 @@ end
     i::Missing
 end
 
+@schema "test.issue-94-child" Issue94Child
+
+@version Issue94ChildV1 begin
+    b::Int
+    a::Int
+end
+
+@schema "test.issue-94-parent" Issue94Parent
+
+@version Issue94ParentV1 begin
+    x::Issue94ChildV1
+end
+
+
 @testset "`Legolas.@version` and associated utilities for declared `Legolas.SchemaVersion`s" begin
     @testset "Legolas.SchemaVersionDeclarationError" begin
         @test_throws SchemaVersionDeclarationError("missing prior `@schema` declaration for `Unknown` in current module") @version(UnknownV1 > ChildV1, begin x end)
@@ -524,6 +538,10 @@ end
     roundtripped = Legolas.read(Legolas.tobuffer(tbl, NestedAgainV1SchemaVersion()))
     @test roundtripped.n[1] == NestedV1(; gc=GrandchildV1(r0_roundtripped), k="test")
     @test roundtripped.h[1] == 3
+
+    @testset "deserialization agnostic to serialized field order" begin
+        @test Arrow.Table("issue-94.arrow").x[1] == Issue94ChildV1(; a=1, b=2)
+    end
 
     @testset "docstring support" begin
         ds = string(@doc DocumentedV1)
