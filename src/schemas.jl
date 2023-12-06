@@ -148,7 +148,11 @@ Return the `Tuple` of `Legolas.SchemaVersion` instances corresponding to `sv`'s 
 """
 @inline parents(::SchemaVersion) = ()
 
-# TODO: deprecate `Legolas.parent(sv::Legolas.SchemaVersion)` in favor of `only(parents(sv))`
+# xref https://github.com/beacon-biosignals/Legolas.jl/pull/107
+@deprecate parent(s) begin
+    p = Legolas.parents(s)
+    isempty(p) ? nothing : only(p)
+end false
 
 """
     Legolas.declared(sv::Legolas.SchemaVersion{name,version})
@@ -795,13 +799,11 @@ macro version(record_type, declared_fields_block=nothing)
     elseif record_type isa Expr && record_type.head == :call && length(record_type.args) == 3 &&
            record_type.args[1] == :> && record_type.args[2] isa Symbol
         parent_record_types = record_type.args[3]
-        if parent_record_types isa Symbol
-            parent_record_types = (parent_record_types,)
-        elseif parent_record_types isa Expr && parent_record_types.head == :vect &&
-               all(T isa Symbol for T in parent_record_types.args)
+        if parent_record_types isa Expr && parent_record_types.head == :vect &&
+           all(T isa Symbol for T in parent_record_types.args)
             parent_record_types = (parent_record_types.args...,)
         else
-            return :(throw(SchemaVersionDeclarationError("provided parent specification is malformed: ", $(Base.Meta.quot(parent_record_types)))))
+            parent_record_types = (parent_record_types,)
         end
         record_type = record_type.args[2]
     else
@@ -872,7 +874,7 @@ macro version(record_type, declared_fields_block=nothing)
                     accumulated_parent_field_name_types = merge(accumulated_parent_field_name_types, current_parent_field_name_types)
                 end
                 if !($Legolas._has_valid_child_field_types($declared_field_names_types, accumulated_parent_field_name_types))
-                    throw(SchemaVersionDeclarationError(string("declared field types violate declared parents' field types")))
+                    throw(SchemaVersionDeclarationError(string("declared field types violate parents' field types")))
                 end
             end
 
