@@ -669,7 +669,11 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
         $Arrow.ArrowTypes.ArrowType(::Type{R}) where {R<:$R} = NamedTuple{fieldnames(R),Tuple{fieldtypes(R)...}}
         $Arrow.ArrowTypes.toarrow(r::$R) = NamedTuple(r)
         $Arrow.ArrowTypes.JuliaType(::Val{$record_type_arrow_name}, ::Any) = $R
-        $Arrow.ArrowTypes.fromarrow(::Type{<:$R}, $(keys(record_fields)...)) = $R(; $(keys(record_fields)...))
+        function $Arrow.ArrowTypes.fromarrowstruct(::Type{<:$R}, ::Val{fnames},
+                                                   $(keys(record_fields)...)) where {fnames}
+            nt = NamedTuple{fnames}(($(keys(record_fields)...),))
+            return $R(; nt...)
+        end
     end
 
     return quote
