@@ -799,3 +799,21 @@ end
     @test n3 isa NestedV1{Missing}
     @test ismissing(n3.k)
 end
+
+@testset "Legolas.recordmerge" begin
+    r = Legolas.recordmerge(ParentV1(; x=1:3, y="a"); y="b")
+    @test r isa ParentV1
+    @test r.x == 1:3
+    @test r.y == "b"
+
+    r = Legolas.recordmerge(ChildV1(; x=1:3, y="a", z=1); y="c", z=2)
+    @test r isa ChildV1
+    @test r.x == 1:3
+    @test r.y == "c"
+    @test r.z == 2
+
+    r = Legolas.recordmerge(ParamV1(; i=UInt8(0)); i=UInt16(1))
+    @test r isa ParamV1{UInt16}
+    @test r.i isa UInt16
+    @test r.i == 1
+end
