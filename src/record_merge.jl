@@ -3,8 +3,6 @@
 
 Return a new `AbstractRecord` with the same schema as `record` by merging the fields of
 `record` and `fields_to_merge` together using `Tables.rowmerge`.
-
-See also: `Tables.rowmerge`.
 """
 function record_merge(record::AbstractRecord; fields_to_merge...)
     # Avoid using `typeof(record)` as can cause constructor failures with parameterized 
