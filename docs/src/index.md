@@ -46,7 +46,6 @@ Legolas.read
 Legolas.lift
 Legolas.construct
 Legolas.record_merge
-Legolas.assign_to_table_metadata!
 Legolas.gather
 Legolas.locations
 Legolas.materialize
