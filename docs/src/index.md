@@ -38,6 +38,7 @@ Legolas.accepted_field_type
 Legolas.extract_schema_version
 Legolas.write
 Legolas.read
+Legolas.tobuffer
 ```
 
 ## Utilities
