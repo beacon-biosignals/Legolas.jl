@@ -45,6 +45,7 @@ Legolas.read
 ```@docs
 Legolas.lift
 Legolas.construct
+Legolas.record_merge
 Legolas.assign_to_table_metadata!
 Legolas.gather
 Legolas.locations
