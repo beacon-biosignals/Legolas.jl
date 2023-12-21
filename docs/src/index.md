@@ -38,6 +38,7 @@ Legolas.accepted_field_type
 Legolas.extract_schema_version
 Legolas.write
 Legolas.read
+Legolas.tobuffer
 ```
 
 ## Utilities
@@ -45,7 +46,7 @@ Legolas.read
 ```@docs
 Legolas.lift
 Legolas.construct
-Legolas.assign_to_table_metadata!
+Legolas.record_merge
 Legolas.gather
 Legolas.locations
 Legolas.materialize
