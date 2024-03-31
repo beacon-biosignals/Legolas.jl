@@ -18,13 +18,15 @@ LegolasConstructionBaseExt = "ConstructionBase"
 
 [compat]
 Accessors = "0.1"
-Aqua = "0.6"
+Aqua = "0.8"
 Arrow = "2.7"
 ArrowTypes = "2.3"
 Compat = "3.34, 4"
 ConstructionBase = "1.5"
 DataFrames = "1"
 Tables = "1.4"
+Test = "1"
+UUIDs = "1"
 julia = "1.6"
 
 [extras]
