@@ -23,7 +23,7 @@ if VERSION < v"1.7"
     end
 end
 
-function ConstructionBase.constructorof(::Type{<:R}) where {R<:AbstractRecord}
+function ConstructionBase.constructorof(::Type{R}) where {R<:AbstractRecord}
     nt = NamedTuple{fieldnames(R)}
     T = Base.typename(R).wrapper
     return (args...) -> T(nt(args))

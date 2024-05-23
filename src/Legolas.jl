@@ -12,7 +12,7 @@ include("record_merge.jl")
 # TODO: Once we require Julia 1.9 or later at a minimum, we can remove this as well as
 # all entries in the Project.toml `[deps]` section that are also listed in `[weakdeps]`.
 if !isdefined(Base, :get_extension)
-    include(joinpath(dirname(@__DIR__), "ext", "LegolasConstructionBaseExt.jl"))
+    include(joinpath(@__DIR__(), "..", "ext", "LegolasConstructionBaseExt.jl"))
     using .LegolasConstructionBaseExt
 end
 
