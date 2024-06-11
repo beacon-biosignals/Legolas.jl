@@ -817,3 +817,48 @@ end
     @test r.i isa UInt16
     @test r.i == 1
 end
+
+#####
+##### constraints
+#####
+
+@schema "test.constraint" Constraint
+
+const CONSTRAINT_V1_CONSTRAINT_LINE = @__LINE__() + 4
+@version ConstraintV1 begin
+    a
+    b
+    @assert a == b
+end
+
+@testset "constraints" begin
+    r = ConstraintV1(; a=1, b=1)
+    @test r isa ConstraintV1
+    @test r.a === 1
+    @test r.b === 1
+
+    r = ConstraintV1(; a=1, b=1.0)
+    @test r isa ConstraintV1
+    @test r.a === 1
+    @test r.b === 1.0
+
+    @test_throws AssertionError ConstraintV1(; a=1, b=2)
+
+    # For exceptions that occur during processing constraints its convenient to include the
+    # location of the `@assert` in the stacktrace.
+    try
+        ConstraintV1(; a=1, b=missing)
+        @test false
+    catch e
+        @test e isa TypeError
+
+        bt = Base.process_backtrace(catch_backtrace())
+        sf = bt[1][1]::Base.StackFrame
+        @test string(sf.file) == @__FILE__
+        @test sf.line == CONSTRAINT_V1_CONSTRAINT_LINE
+    end
+end
+
+@testset "constraints must be after all fields" begin
+    @test_throws SchemaVersionDeclarationError @version(ConstraintV2, begin a; @assert a == 1; b end)
+end
