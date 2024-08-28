@@ -119,9 +119,9 @@ function Base.showerror(io::IO, e::UnknownSchemaVersionError)
     if e.schema_provider !== nothing
         print(io, """
                 The table's metadata indicates that the schema was defined in:
-        
+
                 $(e.schema_provider)
-            
+
                 You likely need to load this package (`using $(e.schema_provider)`)
                 to populate your session with the schema definition.
                 """)
@@ -186,12 +186,12 @@ written via [`Legolas.write`](@ref).
 identifier(sv::SchemaVersion) = throw(UnknownSchemaVersionError(sv))
 
 """
-    Legolas.schema_provider(::Val{schema_name}) where schema_name
+    Legolas.schema_provider(::SchemaVersion)
 
-Returns a `Symbol` corresponding to the package which defines the schema, if known.
+Returns a `Symbol` corresponding to the package which defines the schema version, if known.
 Otherwise returns `nothing`.
 """
-schema_provider(::Val) = nothing
+schema_provider(::SchemaVersion) = nothing
 
 # Used in the implementation of `schema_provider`.
 function defining_package(m::Module)
@@ -419,7 +419,6 @@ macro schema(schema_name, schema_prefix)
             throw(ArgumentError(string("A schema with this name was already declared by a different module: ", m)))
         else
             $Legolas._schema_declared_in_module(::Val{Symbol($schema_name)}) = @__MODULE__
-            $Legolas.schema_provider(::Val{Symbol($schema_name)}) = $Legolas.defining_package(@__MODULE__)
             if !isdefined(@__MODULE__, :__legolas_schema_name_from_prefix__)
                 $(esc(:__legolas_schema_name_from_prefix__))(::Val) = nothing
             end
@@ -515,6 +514,7 @@ function _generate_schema_version_definitions(schema_version::SchemaVersion, par
     return quote
         @inline $Legolas.declared(::$quoted_schema_version_type) = true
         @inline $Legolas.identifier(::$quoted_schema_version_type) = $identifier_string
+        $Legolas.schema_provider(::$quoted_schema_version_type) = $Legolas.defining_package(@__MODULE__)
         @inline $Legolas.parent(::$quoted_schema_version_type) = $(Base.Meta.quot(parent))
         $Legolas.declared_fields(::$quoted_schema_version_type) = $declared_field_names_types
         $Legolas.declaration(::$quoted_schema_version_type) = $(Base.Meta.quot(schema_version_declaration))

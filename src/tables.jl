@@ -173,10 +173,10 @@ function read(io_or_path; validate::Bool=true)
                                              """))
 
         provider = extract_metadata(table, LEGOLAS_SCHEMA_PROVIDER_METADATA_KEY)
-        # If we don't have the schema defined in our session (i.e. `Legolas.schema_provider` is `nothing`), 
+        # If we don't have the schema defined in our session (i.e. `Legolas.schema_provider` is `nothing`),
         # but we do have a hint of where the schema was defined via the metadata, then throw an informative
         # error. If we don't error now, we will throw an `UnknownSchemaVersionError` with less information later.
-        if Legolas.schema_provider(Val(Legolas.name(sv))) === nothing && provider !== nothing
+        if Legolas.schema_provider(sv) === nothing && provider !== nothing
             throw(UnknownSchemaVersionError(sv, Symbol(provider)))
         end
         try
@@ -227,7 +227,7 @@ function write(io_or_path, table, sv::SchemaVersion; validate::Bool=true,
         end
     end
     schema_metadata = LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY => identifier(sv)
-    provider = schema_provider(Val(Legolas.name(sv)))
+    provider = schema_provider(sv)
     provider_metadata = LEGOLAS_SCHEMA_PROVIDER_METADATA_KEY => provider
     if isnothing(metadata)
         if isnothing(provider)
