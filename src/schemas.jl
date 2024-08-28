@@ -103,7 +103,6 @@ end
 
 UnknownSchemaVersionError(schema_version::SchemaVersion) = UnknownSchemaVersionError(schema_version, nothing)
 
-
 function Base.showerror(io::IO, e::UnknownSchemaVersionError)
     print(io, """
               UnknownSchemaVersionError: encountered unknown Legolas schema version:
