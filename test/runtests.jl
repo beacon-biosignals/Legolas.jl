@@ -847,7 +847,7 @@ end
     # In Julia 1.8+ we can test can test against "CheckConstraintError: a == b"
     try
         ConstraintV1(; a=1, b=2)
-        @test false
+        @test false  # Fail safe if the above line doesn't throw
     catch e
         @test e isa CheckConstraintError
         @test e.predicate == :(a == b)
@@ -855,7 +855,7 @@ end
 
     try
         ConstraintV1(; a=0, b=0)
-        @test false
+        @test false  # Fail safe if the above line doesn't throw
     catch e
         @test e isa CheckConstraintError
         @test e.predicate == :(a > 0)
@@ -863,7 +863,7 @@ end
 
     try
         ConstraintV1(; a=6, b=6)
-        @test false
+        @test false  # Fail safe if the above line doesn't throw
     catch e
         @test e isa CheckConstraintError
         @test e.predicate == :(a == b)
@@ -873,7 +873,7 @@ end
     # location of the `@check` in the stacktrace.
     try
         ConstraintV1(; a=1, b=missing)  # Fails when running check `a == b`
-        @test false
+        @test false  # Fail safe if the above line doesn't throw
     catch e
         @test e isa TypeError
 
