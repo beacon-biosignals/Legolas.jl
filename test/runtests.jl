@@ -1,7 +1,7 @@
 using Compat: current_exceptions
 using Legolas, Test, DataFrames, Arrow, UUIDs
-using Legolas: @schema, @version, @check, CheckConstraintError, SchemaVersion,
-               SchemaVersionDeclarationError, DeclaredFieldInfo
+using Legolas: @schema, @version, @check, SchemaVersion, SchemaVersionDeclarationError,
+               DeclaredFieldInfo
 using Accessors
 using Aqua
 
@@ -828,8 +828,9 @@ end
 const CONSTRAINT_V1_CONSTRAINT_LINE = @__LINE__() + 4
 @version ConstraintV1 begin
     a
-    b
-    @assert a == b
+    b = clamp(b, 0, 5)
+    @check a == b
+    @check a > 0
 end
 
 @testset "constraints" begin
@@ -843,12 +844,14 @@ end
     @test r.a === 1
     @test r.b === 1.0
 
-    @test_throws CheckConstraintError ConstraintV1(; a=1, b=2)
+    @test_throws "CheckConstraintError: a == b" ConstraintV1(; a=1, b=2)
+    @test_throws "CheckConstraintError: a > 0" ConstraintV1(; a=0, b=0)
+    @test_throws "CheckConstraintError: a == b" ConstraintV1(; a=6, b=6)
 
     # For exceptions that occur during processing constraints its convenient to include the
     # location of the `@check` in the stacktrace.
     try
-        ConstraintV1(; a=1, b=missing)
+        ConstraintV1(; a=1, b=missing)  # Fails when running check `a == b`
         @test false
     catch e
         @test e isa TypeError
