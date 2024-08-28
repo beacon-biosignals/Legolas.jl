@@ -3,6 +3,7 @@ module Legolas
 using Tables, Arrow, UUIDs
 
 const LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY = "legolas_schema_qualified"
+const LEGOLAS_SCHEMA_PROVIDER_METADATA_KEY = "legolas_julia_schema_provider"
 
 include("lift.jl")
 include("schemas.jl")

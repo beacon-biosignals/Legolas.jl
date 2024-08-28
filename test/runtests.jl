@@ -3,6 +3,26 @@ using Legolas, Test, DataFrames, Arrow, UUIDs
 using Legolas: SchemaVersion, @schema, @version, SchemaVersionDeclarationError, DeclaredFieldInfo
 using Accessors
 using Aqua
+using Pkg
+
+# This test set goes before we load `TestProviderPkg`
+@testset "#46: Informative errors when reading unknown schemas from packages" begin
+    err = Legolas.UnknownSchemaVersionError(Legolas.SchemaVersion("test-provider-pkg.foo", 1), :TestProviderPkg)
+    @test_throws err Legolas.read("test_provider_pkg.arrow")
+    @test contains(sprint(Base.showerror, err), "TestProviderPkg")
+end
+
+# Now load the package, and verify we can write the tables with this metadata
+Pkg.develop(; path=joinpath(@__DIR__, "TestProviderPkg"))
+using TestProviderPkg
+
+@testset "#46: Writing informative metadata about packages providing schemas" begin
+    table = [TestProviderPkg.FooV1(; a=1)]
+    Legolas.write("test_provider_pkg.arrow", table, TestProviderPkg.FooV1SchemaVersion())
+    table = Legolas.read("test_provider_pkg.arrow")
+    v = Legolas.extract_metadata(table, Legolas.LEGOLAS_SCHEMA_PROVIDER_METADATA_KEY)
+    @test v == "TestProviderPkg"
+end
 
 @test_throws SchemaVersionDeclarationError("no prior `@schema` declaration found in current module") @version(TestV1, begin x end)
 

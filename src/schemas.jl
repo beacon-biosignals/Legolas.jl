@@ -98,7 +98,11 @@ end
 
 struct UnknownSchemaVersionError <: Exception
     schema_version::SchemaVersion
+    schema_provider::Union{Nothing, Symbol}
 end
+
+UnknownSchemaVersionError(schema_version::SchemaVersion) = UnknownSchemaVersionError(schema_version, nothing)
+
 
 function Base.showerror(io::IO, e::UnknownSchemaVersionError)
     print(io, """
@@ -110,13 +114,30 @@ function Base.showerror(io::IO, e::UnknownSchemaVersionError)
               This generally indicates that this schema has not been declared (i.e.
               the corresponding `@schema` and/or `@version` statements have not been
               executed) in the current Julia session.
+              """)
+    println(io)
 
-              In practice, this can arise if you try to read a Legolas table with a
-              prescribed schema, but haven't actually loaded the schema definition
-              (or commonly, haven't loaded the dependency that contains the schema
-              definition - check the versions of loaded packages/modules to confirm
-              your environment is as expected).
+    if e.schema_provider !== nothing
+        print(io, """
+                The table's metadata indicates that the schema was defined in:
+        
+                $(e.schema_provider)
+            
+                You likely need to load this package (`using $(e.schema_provider)`)
+                to populate your session with the schema definition.
+                """)
+    else
+        print(io, """
+                In practice, this can arise if you try to read a Legolas table with a
+                prescribed schema, but haven't actually loaded the schema definition
+                (or commonly, haven't loaded the dependency that contains the schema
+                definition - check the versions of loaded packages/modules to confirm
+                your environment is as expected).
+                """)
+    end
+    println(io)
 
+    print(io, """
               Note that if you're in this particular situation, you can still load the raw
               table as-is without Legolas (e.g. via `Arrow.Table(path_to_table)`).
               """)
@@ -164,6 +185,24 @@ as the `\"$LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY\"` field value in table metadat
 written via [`Legolas.write`](@ref).
 """
 identifier(sv::SchemaVersion) = throw(UnknownSchemaVersionError(sv))
+
+"""
+    Legolas.schema_provider(::Val{schema_name}) where schema_name
+
+Returns a `Symbol` corresponding to the package which defines the schema, if known.
+Otherwise returns `nothing`.
+"""
+schema_provider(::Val) = nothing
+
+# Used in the implementation of `schema_provider`.
+function defining_package(m::Module)
+    rootmodule = Base.moduleroot(m)
+    # Check if this module was defined in a package.
+    # If not, return `nothing`
+    path = pathof(rootmodule)
+    path === nothing && return nothing
+    return Symbol(rootmodule)
+end
 
 """
     Legolas.declared_fields(sv::Legolas.SchemaVersion)
@@ -375,12 +414,13 @@ macro schema(schema_name, schema_prefix)
     schema_prefix isa Symbol || return :(throw(ArgumentError(string("`Prefix` provided to `@schema` is not a valid type name: ", $(Base.Meta.quot(schema_prefix))))))
     return quote
         # This approach provides some safety against accidentally replacing another module's schema's name,
-        # without making it annoying to reload code/modules in an interactice development context.
+        # without making it annoying to reload code/modules in an interactive development context.
         m = $Legolas._schema_declared_in_module(Val(Symbol($schema_name)))
         if m isa Module && string(m) != string(@__MODULE__)
             throw(ArgumentError(string("A schema with this name was already declared by a different module: ", m)))
         else
             $Legolas._schema_declared_in_module(::Val{Symbol($schema_name)}) = @__MODULE__
+            $Legolas.schema_provider(::Val{Symbol($schema_name)}) = $Legolas.defining_package(@__MODULE__)
             if !isdefined(@__MODULE__, :__legolas_schema_name_from_prefix__)
                 $(esc(:__legolas_schema_name_from_prefix__))(::Val) = nothing
             end

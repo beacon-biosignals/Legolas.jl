@@ -1,0 +1,6 @@
+name = "TestProviderPkg"
+uuid = "0abfdf01-ee0b-4279-9694-f097aec3ad32"
+version = "0.1.0"
+
+[deps]
+Legolas = "741b9549-f6ed-4911-9fbf-4a1c0c97f0cd"

@@ -132,10 +132,16 @@ return `first(parse_identifier(s))`
 Otherwise, return `nothing`.
 """
 function extract_schema_version(table)
+    v = extract_metadata(table, LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY)
+    isnothing(v) && return nothing
+    return first(parse_identifier(v))
+end
+
+function extract_metadata(table, key)
     metadata = Arrow.getmetadata(table)
     if !isnothing(metadata)
         for (k, v) in metadata
-            k == LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY && return first(parse_identifier(v))
+            k == key && return v
         end
     end
     return nothing
@@ -165,6 +171,14 @@ function read(io_or_path; validate::Bool=true)
                                              via `Legolas.read`; is it missing the expected custom metadata and/or the
                                              expected \"$LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY\" field?
                                              """))
+
+        provider = extract_metadata(table, LEGOLAS_SCHEMA_PROVIDER_METADATA_KEY)
+        # If we don't have the schema defined in our session (i.e. `Legolas.schema_provider` is `nothing`), 
+        # but we do have a hint of where the schema was defined via the metadata, then throw an informative
+        # error. If we don't error now, we will throw an `UnknownSchemaVersionError` with less information later.
+        if Legolas.schema_provider(Val(Legolas.name(sv))) === nothing && provider !== nothing
+            throw(UnknownSchemaVersionError(sv, Symbol(provider)))
+        end
         try
             Legolas.validate(Tables.schema(table), sv)
         catch
@@ -213,11 +227,20 @@ function write(io_or_path, table, sv::SchemaVersion; validate::Bool=true,
         end
     end
     schema_metadata = LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY => identifier(sv)
+    provider = schema_provider(Val(Legolas.name(sv)))
+    provider_metadata = LEGOLAS_SCHEMA_PROVIDER_METADATA_KEY => provider
     if isnothing(metadata)
-        metadata = (schema_metadata,)
+        if isnothing(provider)
+            metadata = (schema_metadata,)
+        else
+            metadata = (schema_metadata, provider_metadata)
+        end
     else
         metadata = Set(metadata)
         push!(metadata, schema_metadata)
+        if !isnothing(provider)
+            push!(metadata, provider_metadata)
+        end
     end
     write_arrow(io_or_path, table; metadata=metadata, kwargs...)
     return table
@@ -237,4 +260,3 @@ function tobuffer(args...; kwargs...)
     seekstart(io)
     return io
 end
-
