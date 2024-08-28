@@ -1,6 +1,7 @@
 using Compat: current_exceptions
 using Legolas, Test, DataFrames, Arrow, UUIDs
-using Legolas: SchemaVersion, @schema, @version, SchemaVersionDeclarationError, DeclaredFieldInfo
+using Legolas: @schema, @version, @check, CheckConstraintError, SchemaVersion,
+               SchemaVersionDeclarationError, DeclaredFieldInfo
 using Accessors
 using Aqua
 
@@ -842,10 +843,10 @@ end
     @test r.a === 1
     @test r.b === 1.0
 
-    @test_throws AssertionError ConstraintV1(; a=1, b=2)
+    @test_throws CheckConstraintError ConstraintV1(; a=1, b=2)
 
     # For exceptions that occur during processing constraints its convenient to include the
-    # location of the `@assert` in the stacktrace.
+    # location of the `@check` in the stacktrace.
     try
         ConstraintV1(; a=1, b=missing)
         @test false
@@ -860,5 +861,5 @@ end
 end
 
 @testset "constraints must be after all fields" begin
-    @test_throws SchemaVersionDeclarationError @version(ConstraintV2, begin a; @assert a == 1; b end)
+    @test_throws SchemaVersionDeclarationError @version(ConstraintV2, begin a; @check a == 1; b end)
 end

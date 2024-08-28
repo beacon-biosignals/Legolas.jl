@@ -786,9 +786,9 @@ macro version(record_type, declared_fields_block=nothing)
         for f in declared_fields_block.args
             if f isa LineNumberNode
                 continue
-            elseif f isa Expr && f.head === :macrocall && f.args[1] === Symbol("@assert")
-                # Expand `@assert` macro here so that we can reliably see the location of
-                # the user define `@assert` when it fails. Ideally `Meta.replace_sourceloc!`
+            elseif f isa Expr && f.head === :macrocall && f.args[1] === Symbol("@check")
+                # Expand `@check` macro here so that we can reliably see the location of
+                # the user define `@check` when it fails. Ideally `Meta.replace_sourceloc!`
                 # would do this for us.
                 constraint_expr = Base.macroexpand(__module__, f)
                 if f.args[2] isa LineNumberNode
