@@ -787,6 +787,8 @@ macro version(record_type, declared_fields_block=nothing)
             if f isa LineNumberNode
                 continue
             elseif f isa Expr && f.head === :macrocall && f.args[1] === Symbol("@check")
+                # Avoids having to import `@check`
+                f.args[1] = Expr(:., :Legolas, QuoteNode(f.args[1]))
                 # Expand `@check` macro here so that we can reliably see the location of
                 # the user define `@check` when it fails. Ideally `Meta.replace_sourceloc!`
                 # would do this for us.

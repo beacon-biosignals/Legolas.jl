@@ -1,6 +1,6 @@
 using Compat: current_exceptions
 using Legolas, Test, DataFrames, Arrow, UUIDs
-using Legolas: @schema, @version, @check, SchemaVersion, SchemaVersionDeclarationError,
+using Legolas: @schema, @version, SchemaVersion, SchemaVersionDeclarationError,
                DeclaredFieldInfo
 using Accessors
 using Aqua
