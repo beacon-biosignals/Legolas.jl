@@ -9,5 +9,5 @@ end
 
 macro check(expr)
     quoted_expr = QuoteNode(expr)
-    return esc(:($expr || throw(Legolas.CheckConstraintError($quoted_expr))))
+    return :($(esc(expr)) || throw(CheckConstraintError($quoted_expr)))
 end
