@@ -19,6 +19,7 @@ Legolas.parse_identifier
 Legolas.name
 Legolas.version
 Legolas.identifier
+Legolas.schema_provider
 Legolas.parent
 Legolas.declared_fields
 Legolas.declaration
