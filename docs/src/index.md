@@ -14,6 +14,7 @@ CurrentModule = Legolas
 Legolas.SchemaVersion
 Legolas.@schema
 Legolas.@version
+Legolas.@check
 Legolas.is_valid_schema_name
 Legolas.parse_identifier
 Legolas.name
