@@ -887,3 +887,7 @@ end
 @testset "constraints must be after all fields" begin
     @test_throws SchemaVersionDeclarationError @version(ConstraintV2, begin a; @check a == 1; b end)
 end
+
+@testset "CheckConstraintError" begin
+    @test sprint(showerror, CheckConstraintError(:(1 == 2))) == "CheckConstraintError: 1 == 2"
+end
