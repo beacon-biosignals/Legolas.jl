@@ -285,8 +285,8 @@ end
 # as this makes error message clearer:
 
 @test NamedTuple(FinitePositiveV1(; a=1)) == (a=1,)
-@test_throws "Legolas.CheckConstraintError: a > 0" FinitePositiveV1(; a=-1)
-@test_throws "Legolas.CheckConstraintError: isfinite(a)" FinitePositiveV1(; a=Inf)
+@test_throws "CheckConstraintError: a > 0" FinitePositiveV1(; a=-1)
+@test_throws "CheckConstraintError: isfinite(a)" FinitePositiveV1(; a=Inf)
 
 # All `@check` constraints must be defined after the fields and any processing on the field will occur before the
 # constraints are checked:
