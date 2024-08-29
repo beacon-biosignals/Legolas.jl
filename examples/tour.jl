@@ -268,6 +268,53 @@ end
 # property that child schema versions have a greater number of constraints than their parents.
 
 #####
+##### Constraints
+#####
+
+# Schema authors may want to restrict the allowed values for a field without having to define a new type. The `@check`
+# macro provides this functionality in a concise way and provides user friendly error messages
+
+@schema "example.finite-positive" FinitePositive
+@version FinitePositiveV1 begin
+    a::Real
+    @check a > 0
+    @check isfinite(a)
+end
+
+# We recommend defining multiple constraints instead of combining them into one (e.g. `@check a > 0 && isfinite(a)`)
+# as this makes error message clearer:
+
+@test NamedTuple(FinitePositiveV1(; a=1)) == (a=1,)
+@test_throws Legolas.CheckConstraintError(:(a > 0)) FinitePositiveV1(; a=-1)
+@test_throws Legolas.CheckConstraintError(:(isfinite(a))) FinitePositiveV1(; a=Inf)
+
+# All `@check` constraints must be defined after the fields and any processing on the field will occur before the
+# constraints are checked:
+
+@schema "example.clamp" Clamp
+@version ClampV1 begin
+    a
+    b = clamp(b, 1, 5)
+    @check a == b
+end
+
+@test NamedTuple(ClampV1(; a=1, b=0)) == (a=1, b=1)
+
+# One use case supported by constraints is enforcing mutually exclusive use of multiple fields:
+
+@schema "example.mutually-exclusive" MutuallyExclusive
+@version MutuallyExclusiveV1 begin
+    x::Union{Real,Missing}
+    y::Union{String,Missing}
+    z::Union{Char,Missing}
+    @check !ismissing(x) ⊻ !ismissing(y) ⊻ !ismissing(z)  # `⊻` is the `xor` function
+end
+
+@test_throws Legolas.CheckConstraintError MutuallyExclusiveV1(; x=1, y="hi")
+@test_throws Legolas.CheckConstraintError MutuallyExclusiveV1(; x=1, z='a')
+@test isequal(NamedTuple(MutuallyExclusiveV1(; x=1)), (x=1, y=missing, z=missing))
+
+#####
 ##### Schema Versioning
 #####
 
