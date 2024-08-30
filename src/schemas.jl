@@ -98,10 +98,11 @@ end
 
 struct UnknownSchemaVersionError <: Exception
     schema_version::SchemaVersion
-    schema_provider::Union{Nothing, Symbol}
+    schema_provider_name::Union{Missing, Symbol}
+    schema_provider_version::Union{Missing, VersionNumber}
 end
 
-UnknownSchemaVersionError(schema_version::SchemaVersion) = UnknownSchemaVersionError(schema_version, nothing)
+UnknownSchemaVersionError(schema_version::SchemaVersion) = UnknownSchemaVersionError(schema_version, missing, missing)
 
 function Base.showerror(io::IO, e::UnknownSchemaVersionError)
     print(io, """
@@ -116,14 +117,17 @@ function Base.showerror(io::IO, e::UnknownSchemaVersionError)
               """)
     println(io)
 
-    if e.schema_provider !== nothing
+    if !ismissing(e.schema_provider_name)
+        provider_string = string(e.schema_provider_name)
+        if !ismissing(e.schema_provider_version)
+            provider_string = string(provider_string, " (version: ", e.schema_provider_version, ")")
+        end
         print(io, """
-                The table's metadata indicates that the schema was defined in:
+                The table's metadata indicates that the table was created with a schema defined in:
 
-                $(e.schema_provider)
+                $(provider_string)
 
-                You likely need to load this package (`using $(e.schema_provider)`)
-                to populate your session with the schema definition.
+                You likely need to load a compatible version of this package to populate your session with the schema definition.
                 """)
     else
         print(io, """
@@ -188,19 +192,20 @@ identifier(sv::SchemaVersion) = throw(UnknownSchemaVersionError(sv))
 """
     Legolas.schema_provider(::SchemaVersion)
 
-Returns a `Symbol` corresponding to the package which defines the schema version, if known.
-Otherwise returns `nothing`.
+Returns a NamedTuple with keys `name` and `version`. The name is a `Symbol` corresponding to the package which defines the schema version, if known; otherwise `nothing`. Likewise the `version` is a `VersionNumber` or `nothing`.
 """
-schema_provider(::SchemaVersion) = nothing
+schema_provider(::SchemaVersion) = (; name=nothing, version=nothing)
+# shadow `pkgversion` so we don't fail on pre-1.9
+pkgversion(m::Module) = isdefined(Base, :pkgversion) ? Base.pkgversion(m) : nothing
 
 # Used in the implementation of `schema_provider`.
-function defining_package(m::Module)
+function defining_package_version(m::Module)
     rootmodule = Base.moduleroot(m)
     # Check if this module was defined in a package.
     # If not, return `nothing`
     path = pathof(rootmodule)
-    path === nothing && return nothing
-    return Symbol(rootmodule)
+    path === nothing && return (; name=nothing, version=nothing)
+    return (; name=Symbol(rootmodule), version=pkgversion(rootmodule))
 end
 
 """
@@ -514,7 +519,7 @@ function _generate_schema_version_definitions(schema_version::SchemaVersion, par
     return quote
         @inline $Legolas.declared(::$quoted_schema_version_type) = true
         @inline $Legolas.identifier(::$quoted_schema_version_type) = $identifier_string
-        $Legolas.schema_provider(::$quoted_schema_version_type) = $Legolas.defining_package(@__MODULE__)
+        $Legolas.schema_provider(::$quoted_schema_version_type) = $Legolas.defining_package_version(@__MODULE__)
         @inline $Legolas.parent(::$quoted_schema_version_type) = $(Base.Meta.quot(parent))
         $Legolas.declared_fields(::$quoted_schema_version_type) = $declared_field_names_types
         $Legolas.declaration(::$quoted_schema_version_type) = $(Base.Meta.quot(schema_version_declaration))

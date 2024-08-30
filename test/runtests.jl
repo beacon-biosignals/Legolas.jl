@@ -7,8 +7,13 @@ using Pkg
 
 # This test set goes before we load `TestProviderPkg`
 @testset "#46: Informative errors when reading unknown schemas from packages" begin
-    err = Legolas.UnknownSchemaVersionError(Legolas.SchemaVersion("test-provider-pkg.foo", 1), :TestProviderPkg)
+    err = Legolas.UnknownSchemaVersionError(Legolas.SchemaVersion("test-provider-pkg.foo", 1), :TestProviderPkg, v"0.1.0")
     @test_throws err Legolas.read("test_provider_pkg.arrow")
+    @test contains(sprint(Base.showerror, err), "TestProviderPkg")
+
+    # Let's test some more error printing while we're here; if we did not have the VersionNumber
+    # (e.g. since the table was generated on Julia pre-1.9), we should still print a reasonable message:
+    err = Legolas.UnknownSchemaVersionError(Legolas.SchemaVersion("test-provider-pkg.foo", 1), :TestProviderPkg, missing)
     @test contains(sprint(Base.showerror, err), "TestProviderPkg")
 end
 
@@ -20,7 +25,7 @@ using TestProviderPkg
     table = [TestProviderPkg.FooV1(; a=1)]
     Legolas.write("test_provider_pkg.arrow", table, TestProviderPkg.FooV1SchemaVersion())
     table = Legolas.read("test_provider_pkg.arrow")
-    v = Legolas.extract_metadata(table, Legolas.LEGOLAS_SCHEMA_PROVIDER_METADATA_KEY)
+    v = Legolas.extract_metadata(table, Legolas.LEGOLAS_SCHEMA_PROVIDER_NAME_METADATA_KEY)
     @test v == "TestProviderPkg"
 end
 

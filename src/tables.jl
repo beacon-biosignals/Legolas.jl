@@ -172,12 +172,13 @@ function read(io_or_path; validate::Bool=true)
                                              expected \"$LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY\" field?
                                              """))
 
-        provider = extract_metadata(table, LEGOLAS_SCHEMA_PROVIDER_METADATA_KEY)
-        # If we don't have the schema defined in our session (i.e. `Legolas.schema_provider` is `nothing`),
-        # but we do have a hint of where the schema was defined via the metadata, then throw an informative
-        # error. If we don't error now, we will throw an `UnknownSchemaVersionError` with less information later.
-        if Legolas.schema_provider(sv) === nothing && provider !== nothing
-            throw(UnknownSchemaVersionError(sv, Symbol(provider)))
+        provider_name = lift(Symbol, extract_metadata(table, LEGOLAS_SCHEMA_PROVIDER_NAME_METADATA_KEY))
+        provider_version = lift(VersionNumber, extract_metadata(table, LEGOLAS_SCHEMA_PROVIDER_VERSION_METADATA_KEY))
+        # If we don't have the schema declared in our session,
+        # then throw an error with all the information we have available about where
+        # the schema was defined.
+        if !declared(sv)
+            throw(UnknownSchemaVersionError(sv, provider_name, provider_version))
         end
         try
             Legolas.validate(Tables.schema(table), sv)
@@ -227,19 +228,25 @@ function write(io_or_path, table, sv::SchemaVersion; validate::Bool=true,
         end
     end
     schema_metadata = LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY => identifier(sv)
-    provider = schema_provider(sv)
-    provider_metadata = LEGOLAS_SCHEMA_PROVIDER_METADATA_KEY => provider
+    provider_name, provider_version = schema_provider(sv)
+    provider_name_metadata = LEGOLAS_SCHEMA_PROVIDER_NAME_METADATA_KEY => string(provider_name)
+    provider_version_metadata = LEGOLAS_SCHEMA_PROVIDER_VERSION_METADATA_KEY => string(provider_version)
     if isnothing(metadata)
-        if isnothing(provider)
-            metadata = (schema_metadata,)
-        else
-            metadata = (schema_metadata, provider_metadata)
+        metadata = (schema_metadata,)
+        if !isnothing(provider_name)
+            metadata = (metadata..., provider_name_metadata)
+            if !isnothing(provider_version)
+                metadata = (metadata..., provider_version_metadata)
+            end
         end
     else
         metadata = Set(metadata)
         push!(metadata, schema_metadata)
-        if !isnothing(provider)
-            push!(metadata, provider_metadata)
+        if !isnothing(provider_name)
+            push!(metadata, provider_name_metadata)
+            if !isnothing(provider_version)
+                push!(metadata, provider_version_metadata)
+            end
         end
     end
     write_arrow(io_or_path, table; metadata=metadata, kwargs...)
