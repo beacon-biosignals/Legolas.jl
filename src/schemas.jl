@@ -98,8 +98,8 @@ end
 
 struct UnknownSchemaVersionError <: Exception
     schema_version::SchemaVersion
-    schema_provider_name::Union{Missing, Symbol}
-    schema_provider_version::Union{Missing, VersionNumber}
+    schema_provider_name::Union{Missing,Symbol}
+    schema_provider_version::Union{Missing,VersionNumber}
 end
 
 UnknownSchemaVersionError(schema_version::SchemaVersion) = UnknownSchemaVersionError(schema_version, missing, missing)
@@ -120,7 +120,7 @@ function Base.showerror(io::IO, e::UnknownSchemaVersionError)
     if !ismissing(e.schema_provider_name)
         provider_string = string(e.schema_provider_name)
         if !ismissing(e.schema_provider_version)
-            provider_string = string(provider_string, " (version: ", e.schema_provider_version, ")")
+            provider_string *= string(" (version: ", e.schema_provider_version, ")")
         end
         print(io, """
                 The table's metadata indicates that the table was created with a schema defined in:
