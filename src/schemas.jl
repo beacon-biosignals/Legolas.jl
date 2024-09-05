@@ -515,6 +515,26 @@ end
 
 _schema_version_from_record_type(::Nothing) = nothing
 
+abstract type MissingSignal end
+struct NotAllMissing <: MissingSignal end
+struct AllMissing <: MissingSignal end
+
+function _check_all_missing(::AllMissing, schema_name; kwargs...)
+    if !all(ismissing, values(kwargs))
+        throw(ArgumentError("Expected all arguments passed to `$schema_name` to be missing."))
+    end
+end
+
+function _check_all_missing(::NotAllMissing, schema_name; kwargs...)
+    if all(ismissing, values(kwargs))
+        @warn "The arguments passed to `$schema_name` are all missing. "*
+              "Are you sure you don't mean `$(schema_name)SchemaVersion`?"*
+              " If this is what you really meant you can call "*
+              "`$schema_name(Legolas.AllMissing())` to avoid this warning."*
+              " Future (breaking) versions of Legolas may make this warning an error."
+    end
+end
+
 # Note also that this function's implementation is allowed to "observe" `Legolas.declared_fields(parent)`
 # (if a parent exists), but is NOT allowed to "observe" `Legolas.declaration(parent)`, since the latter
 # includes the parent's declared field RHS statements. We cannot interpolate/incorporate these statements
@@ -613,26 +633,30 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
     end
     if isempty(type_param_defs)
         inner_constructor_definitions = quote
-            function $R(; $(field_kwargs...))
+            function $R(m::$Legolas.MissingSignal=$Legolas.NotAllMissing(); $(field_kwargs...))
                 $parent_record_application
                 $(field_assignments...)
                 $(constraints...)
+                $Legolas._check_all_missing(m, $(string(R)); $(keys(record_fields)...))
                 return new($(keys(record_fields)...))
             end
         end
     else
         type_param_names = [p.args[1] for p in type_param_defs]
         inner_constructor_definitions = quote
-            function $R{$(type_param_names...)}(; $(field_kwargs...)) where {$(type_param_names...)}
+            function $R{$(type_param_names...)}(m::$Legolas.MissingSignal=$Legolas.NotAllMissing();
+                                                $(field_kwargs...)) where {$(type_param_names...)}
                 $parent_record_application
                 $(parametric_field_assignments...)
                 $(constraints...)
+                $Legolas._check_all_missing(m, $(string(R)); $(keys(record_fields)...))
                 return new{$(type_param_names...)}($(keys(record_fields)...))
             end
-            function $R(; $(field_kwargs...))
+            function $R(m::$Legolas.MissingSignal=$Legolas.NotAllMissing(); $(field_kwargs...))
                 $parent_record_application
                 $(field_assignments...)
                 $(constraints...)
+                $Legolas._check_all_missing(m, $(string(R)); $(keys(record_fields)...))
                 return new{$((:(typeof($n)) for n in names_of_parameterized_fields)...)}($(keys(record_fields)...))
             end
         end

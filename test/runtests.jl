@@ -770,6 +770,16 @@ end
         e = ArgumentError("Invalid value set for field `a`, expected Integer, got a value of type String (\"foo-bar\")")
         @test_throws e FieldErrorV3(; a="foo bar")
     end
+
+    @testset "appropriate all-missing warnings" begin
+        msg = r"arguments.*FieldErrorV1.*are all missing.*FieldErrorV1SchemaVersion"
+        @test_logs (:warn, msg) FieldErrorV1()
+        @test_logs FieldErrorV1(Legolas.AllMissing())
+    end
+
+    @testset "errors when expecting all missing values" begin
+        @test_throws r"expected.*all.*missing"i FieldErrorV1(Legolas.AllMissing(); a="a")
+    end
 end
 
 #####
