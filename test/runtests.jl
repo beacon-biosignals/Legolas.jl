@@ -778,7 +778,8 @@ end
     end
 
     @testset "errors when expecting all missing values" begin
-        @test_throws r"expected.*all.*missing"i FieldErrorV1(Legolas.AllMissing(); a="a")
+        ex = ArgumentError("Expected all arguments passed to `FieldErrorV1` to be missing.")
+        @test_throws ex FieldErrorV1(Legolas.AllMissing(); a="a")
     end
 end
 
