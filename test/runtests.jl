@@ -772,7 +772,7 @@ end
     end
 
     @testset "appropriate warnings with zero-argument constructor" begin
-        msg = r"arguments.*FieldErrorV1.*are all missing.*FieldErrorV1SchemaVersion"
+        msg = r"no arguments passed.*FieldErrorV1.*are you sure.*FieldErrorV1SchemaVersion"i
         @test_logs (:warn, msg) FieldErrorV1()
         @test_logs FieldErrorV1(; a=missing)
     end

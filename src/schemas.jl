@@ -521,7 +521,7 @@ is_default(::DefaultArgument) = true
 default_to(::DefaultArgument, default) = default
 default_to(x, ::Any) = x
 
-function _check_empty_args(schema_name, args)
+function _check_empty_args(schema_name, args...)
     if all(is_default, args)
         @warn "The were no arguments passed to `$schema_name`. "*
               "Are you sure you don't mean `$(schema_name)SchemaVersion`?"*
@@ -628,10 +628,12 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
     outer_constructor_definitions = quote
         $R(row) = $R(; $(kwargs_from_row...))
     end
+    result = gensym("result")
     if isempty(type_param_defs)
         inner_constructor_definitions = quote
             function $R(; $(field_kwargs...))
-                $(keys(record_fields)...) = $Legolas._check_empty_args($string(R); $(field_kwargs...))
+                $(result) = $Legolas._check_empty_args($string(R), $(keys(record_fields)...))
+                $((:($key = $(result)[$i]) for (i, key) in enumerate(keys(record_fields)))...)
                 $parent_record_application
                 $(field_assignments...)
                 $(constraints...)
@@ -642,18 +644,19 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
         type_param_names = [p.args[1] for p in type_param_defs]
         inner_constructor_definitions = quote
             function $R{$(type_param_names...)}(; $(field_kwargs...)) where {$(type_param_names...)}
-                $(keys(record_fields)...) = $Legolas._check_empty_args($string(R); $(field_kwargs...))
+                $(result) = $Legolas._check_empty_args($(string(R)), $(keys(record_fields)...))
+                $((:($key = $(result)[$i]) for (i, key) in enumerate(keys(record_fields)))...)
                 $parent_record_application
                 $(parametric_field_assignments...)
                 $(constraints...)
                 return new{$(type_param_names...)}($(keys(record_fields)...))
             end
             function $R(; $(field_kwargs...))
-                $(keys(record_fields)...) = $Legolas._check_empty_args($string(R); $(field_kwargs...))
+                $(result) = $Legolas._check_empty_args($(string(R)), $(keys(record_fields)...))
+                $((:($key = $(result)[$i]) for (i, key) in enumerate(keys(record_fields)))...)
                 $parent_record_application
                 $(field_assignments...)
                 $(constraints...)
-                $Legolas._check_all_missing(m, $(string(R)); $(keys(record_fields)...))
                 return new{$((:(typeof($n)) for n in names_of_parameterized_fields)...)}($(keys(record_fields)...))
             end
         end
