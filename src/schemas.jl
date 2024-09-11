@@ -515,24 +515,21 @@ end
 
 _schema_version_from_record_type(::Nothing) = nothing
 
-abstract type MissingSignal end
-struct NotAllMissing <: MissingSignal end
-struct AllMissing <: MissingSignal end
+struct DefaultArgument end
+is_default(::Any) = false
+is_default(::DefaultArgument) = true
+default_to(::DefaultArgument, default) = default
+default_to(x, ::Any) = x
 
-function _check_all_missing(::AllMissing, schema_name; kwargs...)
-    if !all(ismissing, values(kwargs))
-        throw(ArgumentError("Expected all arguments passed to `$schema_name` to be missing."))
-    end
-end
-
-function _check_all_missing(::NotAllMissing, schema_name; kwargs...)
-    if all(ismissing, values(kwargs))
-        @warn "The arguments passed to `$schema_name` are all missing. "*
+function _check_empty_args(schema_name, args)
+    if all(is_default, args)
+        @warn "The were no arguments passed to `$schema_name`. "*
               "Are you sure you don't mean `$(schema_name)SchemaVersion`?"*
               " If this is what you really meant you can call "*
-              "`$schema_name(Legolas.AllMissing())` to avoid this warning."*
+              "`$schema_name(; arg1=missing, arg2=...)` to avoid this warning."*
               " Future (breaking) versions of Legolas may make this warning an error."
     end
+    return default_to.(args, missing)
 end
 
 # Note also that this function's implementation is allowed to "observe" `Legolas.declared_fields(parent)`
@@ -612,7 +609,7 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
     end
 
     # generate `parent_record_application`
-    field_kwargs = [Expr(:kw, n, :missing) for n in keys(record_fields)]
+    field_kwargs = [Expr(:kw, n, :($Legolas.DefaultArgument())) for n in keys(record_fields)]
     parent_record_application = nothing
     parent = Legolas.parent(schema_version)
     if !isnothing(parent)
@@ -627,32 +624,32 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
 
     # generate `inner_constructor_definitions` and `outer_constructor_definitions`
     R = record_type_symbol
-    kwargs_from_row = [Expr(:kw, n, :(get(row, $(Base.Meta.quot(n)), missing))) for n in keys(record_fields)]
+    kwargs_from_row = [Expr(:kw, n, :(get(row, $(Base.Meta.quot(n)), $Legolas.DefaultArgument()))) for n in keys(record_fields)]
     outer_constructor_definitions = quote
         $R(row) = $R(; $(kwargs_from_row...))
     end
     if isempty(type_param_defs)
         inner_constructor_definitions = quote
-            function $R(m::$Legolas.MissingSignal=$Legolas.NotAllMissing(); $(field_kwargs...))
+            function $R(; $(field_kwargs...))
+                $(keys(record_fields)...) = $Legolas._check_empty_args($string(R); $(field_kwargs...))
                 $parent_record_application
                 $(field_assignments...)
                 $(constraints...)
-                $Legolas._check_all_missing(m, $(string(R)); $(keys(record_fields)...))
                 return new($(keys(record_fields)...))
             end
         end
     else
         type_param_names = [p.args[1] for p in type_param_defs]
         inner_constructor_definitions = quote
-            function $R{$(type_param_names...)}(m::$Legolas.MissingSignal=$Legolas.NotAllMissing();
-                                                $(field_kwargs...)) where {$(type_param_names...)}
+            function $R{$(type_param_names...)}(; $(field_kwargs...)) where {$(type_param_names...)}
+                $(keys(record_fields)...) = $Legolas._check_empty_args($string(R); $(field_kwargs...))
                 $parent_record_application
                 $(parametric_field_assignments...)
                 $(constraints...)
-                $Legolas._check_all_missing(m, $(string(R)); $(keys(record_fields)...))
                 return new{$(type_param_names...)}($(keys(record_fields)...))
             end
-            function $R(m::$Legolas.MissingSignal=$Legolas.NotAllMissing(); $(field_kwargs...))
+            function $R(; $(field_kwargs...))
+                $(keys(record_fields)...) = $Legolas._check_empty_args($string(R); $(field_kwargs...))
                 $parent_record_application
                 $(field_assignments...)
                 $(constraints...)

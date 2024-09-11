@@ -771,15 +771,10 @@ end
         @test_throws e FieldErrorV3(; a="foo bar")
     end
 
-    @testset "appropriate all-missing warnings" begin
+    @testset "appropriate warnings with zero-argument constructor" begin
         msg = r"arguments.*FieldErrorV1.*are all missing.*FieldErrorV1SchemaVersion"
         @test_logs (:warn, msg) FieldErrorV1()
-        @test_logs FieldErrorV1(Legolas.AllMissing())
-    end
-
-    @testset "errors when expecting all missing values" begin
-        ex = ArgumentError("Expected all arguments passed to `FieldErrorV1` to be missing.")
-        @test_throws ex FieldErrorV1(Legolas.AllMissing(); a="a")
+        @test_logs FieldErrorV1(; a=missing)
     end
 end
 
