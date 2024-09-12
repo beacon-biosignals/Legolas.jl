@@ -773,8 +773,20 @@ end
 
     @testset "appropriate warnings with zero-argument constructor" begin
         msg = r"no arguments passed.*FieldErrorV1.*are you sure.*FieldErrorV1SchemaVersion"i
+
         @test_logs (:warn, msg) FieldErrorV1()
         @test_logs FieldErrorV1(; a=missing)
+        @test_logs FieldErrorV1((;))
+
+        @test_logs (:warn, msg) begin
+            @test_throws ArgumentError FieldErrorV1{String,Int}()
+        end
+        @test_logs begin
+            @test_throws ArgumentError FieldErrorV1{String,Int}(; a=missing)
+        end
+        @test_logs begin
+            @test_throws ArgumentError FieldErrorV1{String,Int}((;))
+        end
     end
 end
 

@@ -521,7 +521,15 @@ is_default(::DefaultArgument) = true
 default_to(::DefaultArgument, default) = default
 default_to(x, ::Any) = x
 
-function _check_empty_args(schema_name, args...)
+abstract type CheckArgsFlag end
+struct CheckArgs <: CheckArgsFlag end
+struct DontCheckArgs <: CheckArgsFlag end
+
+function _check_empty_args(::DontCheckArgs, _, args...)
+    return default_to.(args, missing)
+end
+
+function _check_empty_args(::CheckArgs, schema_name, args...)
     if all(is_default, args)
         @warn "The were no arguments passed to `$schema_name`. "*
               "Are you sure you don't mean `$(schema_name)SchemaVersion`?"*
@@ -626,13 +634,17 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
     R = record_type_symbol
     kwargs_from_row = [Expr(:kw, n, :(get(row, $(Base.Meta.quot(n)), $Legolas.DefaultArgument()))) for n in keys(record_fields)]
     outer_constructor_definitions = quote
+        $R(::NamedTuple{}) = $R($Legolas.DontCheckArgs())
         $R(row) = $R(; $(kwargs_from_row...))
     end
     result = gensym("result")
     if isempty(type_param_defs)
         inner_constructor_definitions = quote
-            function $R(; $(field_kwargs...))
-                $(result) = $Legolas._check_empty_args($string(R), $(keys(record_fields)...))
+            # IMPLEMENTATION NOTE: `$R(; $(field_kwargs...))` overlaps with `$R()` so if we
+            # tried to implement the warning for empty arguments by defining `$R()` we would
+            # be defining the same method twice.
+            function $R(flag::$Legolas.CheckArgsFlag=$Legolas.CheckArgs(); $(field_kwargs...))
+                $(result) = $Legolas._check_empty_args(flag, $string(R), $(keys(record_fields)...))
                 $((:($key = $(result)[$i]) for (i, key) in enumerate(keys(record_fields)))...)
                 $parent_record_application
                 $(field_assignments...)
@@ -643,16 +655,16 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
     else
         type_param_names = [p.args[1] for p in type_param_defs]
         inner_constructor_definitions = quote
-            function $R{$(type_param_names...)}(; $(field_kwargs...)) where {$(type_param_names...)}
-                $(result) = $Legolas._check_empty_args($(string(R)), $(keys(record_fields)...))
+            function $R{$(type_param_names...)}(flag::$Legolas.CheckArgsFlag=$Legolas.CheckArgs(); $(field_kwargs...)) where {$(type_param_names...)}
+                $(result) = $Legolas._check_empty_args(flag, $(string(R)), $(keys(record_fields)...))
                 $((:($key = $(result)[$i]) for (i, key) in enumerate(keys(record_fields)))...)
                 $parent_record_application
                 $(parametric_field_assignments...)
                 $(constraints...)
                 return new{$(type_param_names...)}($(keys(record_fields)...))
             end
-            function $R(; $(field_kwargs...))
-                $(result) = $Legolas._check_empty_args($(string(R)), $(keys(record_fields)...))
+            function $R(flag::$Legolas.CheckArgsFlag=$Legolas.CheckArgs(); $(field_kwargs...))
+                $(result) = $Legolas._check_empty_args(flag, $(string(R)), $(keys(record_fields)...))
                 $((:($key = $(result)[$i]) for (i, key) in enumerate(keys(record_fields)))...)
                 $parent_record_application
                 $(field_assignments...)
@@ -662,6 +674,7 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
         end
         outer_constructor_definitions = quote
             $outer_constructor_definitions
+            $R{$(type_param_names...)}(::NamedTuple) where {$(type_param_names...)} = $R{$(type_param_names...)}($Legolas.DontCheckArgs())
             $R{$(type_param_names...)}(row) where {$(type_param_names...)} = $R{$(type_param_names...)}(; $(kwargs_from_row...))
         end
     end
