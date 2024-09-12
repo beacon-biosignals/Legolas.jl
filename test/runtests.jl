@@ -691,6 +691,10 @@ end
     a::Integer = replace(a, ' ' => '-')
 end
 
+@version FieldErrorV4 begin
+    x::Union{String,Missing}
+end
+
 @testset "Legolas record constructor error handling" begin
     @testset "field constructor error" begin
         ex_stack = try
@@ -772,11 +776,15 @@ end
     end
 
     @testset "appropriate warnings with zero-argument constructor" begin
-        msg = r"no arguments passed.*FieldErrorV1.*are you sure.*FieldErrorV1SchemaVersion"i
+        msg = r"no arguments passed.*FieldErrorV.*are you sure.*FieldErrorV(1|4)SchemaVersion"i
 
         @test_logs (:warn, msg) FieldErrorV1()
         @test_logs FieldErrorV1(; a=missing)
         @test_logs FieldErrorV1((;))
+
+        @test_logs (:warn, msg) FieldErrorV4()
+        @test_logs FieldErrorV4(; x=missing)
+        @test_logs FieldErrorV4((;))
 
         @test_logs (:warn, msg) begin
             @test_throws ArgumentError FieldErrorV1{String,Int}()

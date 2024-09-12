@@ -644,7 +644,7 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
             # tried to implement the warning for empty arguments by defining `$R()` we would
             # be defining the same method twice.
             function $R(flag::$Legolas.CheckArgsFlag=$Legolas.CheckArgs(); $(field_kwargs...))
-                $(result) = $Legolas._check_empty_args(flag, $string(R), $(keys(record_fields)...))
+                $(result) = $Legolas._check_empty_args(flag, $(string(R)), $(keys(record_fields)...))
                 $((:($key = $(result)[$i]) for (i, key) in enumerate(keys(record_fields)))...)
                 $parent_record_application
                 $(field_assignments...)
