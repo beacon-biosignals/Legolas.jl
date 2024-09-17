@@ -634,7 +634,7 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
     R = record_type_symbol
     kwargs_from_row = [Expr(:kw, n, :(get(row, $(Base.Meta.quot(n)), $Legolas.DefaultArgument()))) for n in keys(record_fields)]
     outer_constructor_definitions = quote
-        $R(::NamedTuple{}) = $R($Legolas.DontCheckArgs())
+        $R(::NamedTuple{(), Tuple{}}) = $R($Legolas.DontCheckArgs())
         $R(row) = $R(; $(kwargs_from_row...))
     end
     result = gensym("result")
