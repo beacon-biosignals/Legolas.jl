@@ -386,8 +386,8 @@ end
         @test_throws SchemaVersionDeclarationError("malformed `@version` field expression: f()") @version(ChildV2, begin f() end)
     end
 
-    # Workaround https://github.com/JuliaLang/julia/issues/52683
-    err = VERSION > v"1.11-" ? UndefVarError(:UnknownV1, Main) : UndefVarError(:UnknownV1)
+    # Workaround https://github.com/JuliaLang/julia/issues/54082
+    err = v"1.11-" <= VERSION <= v"1.12-" ? UndefVarError(:UnknownV1, Main) : UndefVarError(:UnknownV1)
     @test_throws err @version(ChildV1 > UnknownV1, begin x end)
 
     undeclared = SchemaVersion("undeclared", 3)
