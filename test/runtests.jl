@@ -21,6 +21,12 @@ using Pkg
     # (e.g. since the table was generated on Julia pre-1.9), we should still print a reasonable message:
     err = Legolas.UnknownSchemaVersionError(Legolas.SchemaVersion("test-provider-pkg.foo", 1), :TestProviderPkg, missing)
     @test contains(sprint(Base.showerror, err), "TestProviderPkg")
+
+    # Test a table that does not have the metadata
+    err = Legolas.UnknownSchemaVersionError(Legolas.SchemaVersion("test.issue-94-parent", 1), missing, missing)
+    @test_throws err Legolas.read("issue-94.arrow")
+    # Still a reasonable message
+    @test contains(sprint(Base.showerror, err), "UnknownSchemaVersionError: encountered unknown Legolas schema")
 end
 
 # Now load the package, and verify we can write the tables with this metadata
