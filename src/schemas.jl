@@ -563,7 +563,7 @@ _schema_version_from_record_type(::Nothing) = nothing
 # includes the parent's declared field RHS statements. We cannot interpolate/incorporate these statements
 # in the child's record type definition because they may reference bindings from the parent's `@version`
 # callsite that are not available/valid at the child's `@version` callsite.
-function _generate_record_type_definitions(schema_version::SchemaVersion, record_type_symbol::Symbol)
+function _generate_record_type_definitions(schema_version::SchemaVersion, record_type_symbol::Symbol, constraints::AbstractVector)
     # generate `schema_version_type_alias_definition`
     T = Symbol(string(record_type_symbol, "SchemaVersion"))
     schema_version_type_alias_definition = :(const $T = $(Base.Meta.quot(typeof(schema_version))))
@@ -659,6 +659,7 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
             function $R(; $(field_kwargs...))
                 $parent_record_application
                 $(field_assignments...)
+                $(constraints...)
                 return new($(keys(record_fields)...))
             end
         end
@@ -668,11 +669,13 @@ function _generate_record_type_definitions(schema_version::SchemaVersion, record
             function $R{$(type_param_names...)}(; $(field_kwargs...)) where {$(type_param_names...)}
                 $parent_record_application
                 $(parametric_field_assignments...)
+                $(constraints...)
                 return new{$(type_param_names...)}($(keys(record_fields)...))
             end
             function $R(; $(field_kwargs...))
                 $parent_record_application
                 $(field_assignments...)
+                $(constraints...)
                 return new{$((:(typeof($n)) for n in names_of_parameterized_fields)...)}($(keys(record_fields)...))
             end
         end
@@ -821,8 +824,25 @@ macro version(record_type, declared_fields_block=nothing)
 
     # parse `declared_fields_block`
     declared_field_statements = Any[]
+    declared_constraint_statements = Any[]
     if declared_fields_block isa Expr && declared_fields_block.head == :block && !isempty(declared_fields_block.args)
-        declared_field_statements = [f for f in declared_fields_block.args if !(f isa LineNumberNode)]
+        for f in declared_fields_block.args
+            if f isa LineNumberNode
+                continue
+            elseif f isa Expr && f.head === :macrocall && f.args[1] === Symbol("@check")
+                constraint_expr = Base.macroexpand(Legolas, f)
+                # Update the expression such that a failure shows the location of the user
+                # defined `@check` call. Ideally `Meta.replace_sourceloc!` would do this.
+                if f.args[2] isa LineNumberNode
+                    constraint_expr = Expr(:block, f.args[2], constraint_expr)
+                end
+                push!(declared_constraint_statements, constraint_expr)
+            elseif isempty(declared_constraint_statements)
+                push!(declared_field_statements, f)
+            else
+                return :(throw(SchemaVersionDeclarationError("all `@version` field expressions must be defined before constraints:\n", $(Base.Meta.quot(declared_fields_block)))))
+            end
+        end
     end
     declared_field_infos = DeclaredFieldInfo[]
     for stmt in declared_field_statements
@@ -843,6 +863,7 @@ macro version(record_type, declared_fields_block=nothing)
         return :(throw(SchemaVersionDeclarationError($msg)))
     end
     declared_field_names_types = Expr(:tuple, Expr(:parameters, (Expr(:kw, f.name, esc(f.type)) for f in declared_field_infos)...))
+    constraints = [Base.Meta.quot(ex) for ex in declared_constraint_statements]
 
     return quote
         if !isdefined((@__MODULE__), :__legolas_schema_name_from_prefix__)
@@ -870,7 +891,7 @@ macro version(record_type, declared_fields_block=nothing)
                 Base.@__doc__($(Base.Meta.quot(record_type)))
                 $(esc(:eval))($Legolas._generate_schema_version_definitions(schema_version, parent, $declared_field_names_types, schema_version_declaration))
                 $(esc(:eval))($Legolas._generate_validation_definitions(schema_version))
-                $(esc(:eval))($Legolas._generate_record_type_definitions(schema_version, $(Base.Meta.quot(record_type))))
+                $(esc(:eval))($Legolas._generate_record_type_definitions(schema_version, $(Base.Meta.quot(record_type)), [$(constraints...)]))
             end
         end
         nothing

@@ -1,6 +1,7 @@
 using Compat: current_exceptions
 using Legolas, Test, DataFrames, Arrow, UUIDs
-using Legolas: SchemaVersion, @schema, @version, SchemaVersionDeclarationError, DeclaredFieldInfo
+using Legolas: @schema, @version, CheckConstraintError, SchemaVersion,
+               SchemaVersionDeclarationError, DeclaredFieldInfo
 using Accessors
 using Aqua
 using Pkg
@@ -849,4 +850,77 @@ end
     @test r isa ParamV1{UInt16}
     @test r.i isa UInt16
     @test r.i == 1
+end
+
+#####
+##### constraints
+#####
+
+@schema "test.constraint" Constraint
+
+const CONSTRAINT_V1_EQUAL_CONSTRAINT_LINE = @__LINE__() + 4
+@version ConstraintV1 begin
+    a
+    b = clamp(b, 0, 5)
+    @check a == b
+    @check a > 0
+end
+
+@testset "constraints" begin
+    r = ConstraintV1(; a=1, b=1)
+    @test r isa ConstraintV1
+    @test r.a === 1
+    @test r.b === 1
+
+    r = ConstraintV1(; a=1, b=1.0)
+    @test r isa ConstraintV1
+    @test r.a === 1
+    @test r.b === 1.0
+
+    # In Julia 1.8+ we can test can test against "CheckConstraintError: a == b"
+    try
+        ConstraintV1(; a=1, b=2)
+        @test false  # Fail safe if the above line doesn't throw
+    catch e
+        @test e isa CheckConstraintError
+        @test e.predicate == :(a == b)
+    end
+
+    try
+        ConstraintV1(; a=0, b=0)
+        @test false  # Fail safe if the above line doesn't throw
+    catch e
+        @test e isa CheckConstraintError
+        @test e.predicate == :(a > 0)
+    end
+
+    try
+        ConstraintV1(; a=6, b=6)
+        @test false  # Fail safe if the above line doesn't throw
+    catch e
+        @test e isa CheckConstraintError
+        @test e.predicate == :(a == b)
+    end
+
+    # For exceptions that occur during processing constraints its convenient to include the
+    # location of the `@check` in the stacktrace.
+    try
+        ConstraintV1(; a=1, b=missing)  # Fails when running check `a == b`
+        @test false  # Fail safe if the above line doesn't throw
+    catch e
+        @test e isa TypeError
+
+        bt = Base.process_backtrace(catch_backtrace())
+        sf = bt[1][1]::Base.StackFrame
+        @test string(sf.file) == @__FILE__
+        @test sf.line == CONSTRAINT_V1_EQUAL_CONSTRAINT_LINE
+    end
+end
+
+@testset "constraints must be after all fields" begin
+    @test_throws SchemaVersionDeclarationError @version(ConstraintV2, begin a; @check a == 1; b end)
+end
+
+@testset "CheckConstraintError" begin
+    @test sprint(showerror, CheckConstraintError(:(1 == 2))) == "CheckConstraintError: 1 == 2"
 end

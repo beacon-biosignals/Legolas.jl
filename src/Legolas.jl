@@ -7,6 +7,7 @@ const LEGOLAS_SCHEMA_PROVIDER_NAME_METADATA_KEY = "legolas_julia_schema_provider
 const LEGOLAS_SCHEMA_PROVIDER_VERSION_METADATA_KEY = "legolas_julia_schema_provider_version"
 
 include("lift.jl")
+include("constraints.jl")
 include("schemas.jl")
 include("tables.jl")
 include("record_merge.jl")
