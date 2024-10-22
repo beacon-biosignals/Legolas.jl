@@ -11,6 +11,11 @@ using Pkg
     @test_throws err Legolas.read("test_provider_pkg.arrow")
     @test contains(sprint(Base.showerror, err), "TestProviderPkg")
 
+    # Test we can load the table with Arrow.Table as the error message suggests
+    table = Arrow.Table("test_provider_pkg.arrow")
+    @test table.a[1] == 1
+    @test length(table.a) == 1
+
     # Let's test some more error printing while we're here; if we did not have the VersionNumber
     # (e.g. since the table was generated on Julia pre-1.9), we should still print a reasonable message:
     err = Legolas.UnknownSchemaVersionError(Legolas.SchemaVersion("test-provider-pkg.foo", 1), :TestProviderPkg, missing)
