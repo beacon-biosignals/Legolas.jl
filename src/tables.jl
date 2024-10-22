@@ -227,27 +227,12 @@ function write(io_or_path, table, sv::SchemaVersion; validate::Bool=true,
             @warn "could not determine `Tables.Schema` from table provided to `Legolas.write`; skipping schema validation"
         end
     end
-    schema_metadata = LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY => identifier(sv)
-    provider_name, provider_version = schema_provider(sv)
-    provider_name_metadata = LEGOLAS_SCHEMA_PROVIDER_NAME_METADATA_KEY => string(provider_name)
-    provider_version_metadata = LEGOLAS_SCHEMA_PROVIDER_VERSION_METADATA_KEY => string(provider_version)
-    if isnothing(metadata)
-        metadata = (schema_metadata,)
-        if !isnothing(provider_name)
-            metadata = (metadata..., provider_name_metadata)
-            if !isnothing(provider_version)
-                metadata = (metadata..., provider_version_metadata)
-            end
-        end
-    else
-        metadata = Set(metadata)
-        push!(metadata, schema_metadata)
-        if !isnothing(provider_name)
-            push!(metadata, provider_name_metadata)
-            if !isnothing(provider_version)
-                push!(metadata, provider_version_metadata)
-            end
-        end
+    metadata = Set{String,String}(isnothing(metadata) ? [] : metadata)
+    push!(metadata, LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY => identifier(sv))
+    provider = schema_provider(sv)
+    if !isnothing(provider)
+        push!(metadata, LEGOLAS_SCHEMA_PROVIDER_NAME_METADATA_KEY => string(provider_name))
+        push!(metadata, LEGOLAS_SCHEMA_PROVIDER_VERSION_METADATA_KEY => string(provider_version))
     end
     write_arrow(io_or_path, table; metadata=metadata, kwargs...)
     return table
