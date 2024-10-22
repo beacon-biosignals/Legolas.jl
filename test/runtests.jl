@@ -36,7 +36,7 @@ using TestProviderPkg
 
     v = Legolas.extract_metadata(table, Legolas.LEGOLAS_SCHEMA_PROVIDER_VERSION_METADATA_KEY)
     # We currently only write the version on 1.9+ where we can use `pkgversion`
-    @test v == VERSION >= v"1.9-" ? "0.1.0" : nothing
+    @test v == (VERSION >= v"1.9-" ? "0.1.0" : nothing)
 end
 
 @test_throws SchemaVersionDeclarationError("no prior `@schema` declaration found in current module") @version(TestV1, begin x end)
