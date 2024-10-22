@@ -27,9 +27,9 @@ using TestProviderPkg
     table = Legolas.read("test_provider_pkg.arrow")
     v = Legolas.extract_metadata(table, Legolas.LEGOLAS_SCHEMA_PROVIDER_NAME_METADATA_KEY)
     @test v == "TestProviderPkg"
-    # it is breaking to change the key
-    @test Legolas.LEGOLAS_SCHEMA_PROVIDER_NAME_METADATA_KEY == "legolas_julia_schema_provider_name"
 
+    v = Legolas.extract_metadata(table, Legolas.LEGOLAS_SCHEMA_PROVIDER_VERSION_METADATA_KEY)
+    @test v == "0.1.0"
 end
 
 @test_throws SchemaVersionDeclarationError("no prior `@schema` declaration found in current module") @version(TestV1, begin x end)

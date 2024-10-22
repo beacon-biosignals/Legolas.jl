@@ -202,7 +202,6 @@ pkgversion(m::Module) = isdefined(Base, :pkgversion) ? Base.pkgversion(m) : noth
 function defining_package_version(m::Module)
     rootmodule = Base.moduleroot(m)
     # Check if this module was defined in a package.
-    # If not, return `nothing`
     path = pathof(rootmodule)
     path === nothing && return (; name=nothing, version=nothing)
     return (; name=Symbol(rootmodule), version=pkgversion(rootmodule))
