@@ -132,10 +132,16 @@ return `first(parse_identifier(s))`
 Otherwise, return `nothing`.
 """
 function extract_schema_version(table)
+    v = extract_metadata(table, LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY)
+    isnothing(v) && return nothing
+    return first(parse_identifier(v))
+end
+
+function extract_metadata(table, key)
     metadata = Arrow.getmetadata(table)
     if !isnothing(metadata)
         for (k, v) in metadata
-            k == LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY && return first(parse_identifier(v))
+            k == key && return v
         end
     end
     return nothing
@@ -165,6 +171,15 @@ function read(io_or_path; validate::Bool=true)
                                              via `Legolas.read`; is it missing the expected custom metadata and/or the
                                              expected \"$LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY\" field?
                                              """))
+
+        provider_name = lift(Symbol, extract_metadata(table, LEGOLAS_SCHEMA_PROVIDER_NAME_METADATA_KEY))
+        provider_version = lift(VersionNumber, extract_metadata(table, LEGOLAS_SCHEMA_PROVIDER_VERSION_METADATA_KEY))
+        # If we don't have the schema declared in our session,
+        # then throw an error with all the information we have available about where
+        # the schema was defined.
+        if !declared(sv)
+            throw(UnknownSchemaVersionError(sv, provider_name, provider_version))
+        end
         try
             Legolas.validate(Tables.schema(table), sv)
         catch
@@ -212,12 +227,14 @@ function write(io_or_path, table, sv::SchemaVersion; validate::Bool=true,
             @warn "could not determine `Tables.Schema` from table provided to `Legolas.write`; skipping schema validation"
         end
     end
-    schema_metadata = LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY => identifier(sv)
-    if isnothing(metadata)
-        metadata = (schema_metadata,)
-    else
-        metadata = Set(metadata)
-        push!(metadata, schema_metadata)
+    metadata = Set{Pair{String,String}}(isnothing(metadata) ? [] : metadata)
+    push!(metadata, LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY => identifier(sv))
+    provider = schema_provider(sv)
+    if !isnothing(provider.name)
+        push!(metadata, LEGOLAS_SCHEMA_PROVIDER_NAME_METADATA_KEY => string(provider.name))
+    end
+    if !isnothing(provider.version)
+        push!(metadata, LEGOLAS_SCHEMA_PROVIDER_VERSION_METADATA_KEY => string(provider.version))
     end
     write_arrow(io_or_path, table; metadata=metadata, kwargs...)
     return table
@@ -237,4 +254,3 @@ function tobuffer(args...; kwargs...)
     seekstart(io)
     return io
 end
-

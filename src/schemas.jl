@@ -98,7 +98,11 @@ end
 
 struct UnknownSchemaVersionError <: Exception
     schema_version::SchemaVersion
+    schema_provider_name::Union{Missing,Symbol}
+    schema_provider_version::Union{Missing,VersionNumber}
 end
+
+UnknownSchemaVersionError(schema_version::SchemaVersion) = UnknownSchemaVersionError(schema_version, missing, missing)
 
 function Base.showerror(io::IO, e::UnknownSchemaVersionError)
     print(io, """
@@ -110,13 +114,33 @@ function Base.showerror(io::IO, e::UnknownSchemaVersionError)
               This generally indicates that this schema has not been declared (i.e.
               the corresponding `@schema` and/or `@version` statements have not been
               executed) in the current Julia session.
+              """)
+    println(io)
 
-              In practice, this can arise if you try to read a Legolas table with a
-              prescribed schema, but haven't actually loaded the schema definition
-              (or commonly, haven't loaded the dependency that contains the schema
-              definition - check the versions of loaded packages/modules to confirm
-              your environment is as expected).
+    if !ismissing(e.schema_provider_name)
+        provider_string = string(e.schema_provider_name)
+        if !ismissing(e.schema_provider_version)
+            provider_string *= string(" ", e.schema_provider_version)
+        end
+        print(io, """
+                The table's metadata indicates that the table was created with a schema defined in:
 
+                  $(provider_string)
+
+                You likely need to load a compatible version of this package to populate your session with the schema definition.
+                """)
+    else
+        print(io, """
+                In practice, this can arise if you try to read a Legolas table with a
+                prescribed schema, but haven't actually loaded the schema definition
+                (or commonly, haven't loaded the dependency that contains the schema
+                definition - check the versions of loaded packages/modules to confirm
+                your environment is as expected).
+                """)
+    end
+    println(io)
+
+    print(io, """
               Note that if you're in this particular situation, you can still load the raw
               table as-is without Legolas (e.g. via `Arrow.Table(path_to_table)`).
               """)
@@ -164,6 +188,24 @@ as the `\"$LEGOLAS_SCHEMA_QUALIFIED_METADATA_KEY\"` field value in table metadat
 written via [`Legolas.write`](@ref).
 """
 identifier(sv::SchemaVersion) = throw(UnknownSchemaVersionError(sv))
+
+"""
+    Legolas.schema_provider(::SchemaVersion)
+
+Returns a NamedTuple with keys `name` and `version`. The name is a `Symbol` corresponding to the package which defines the schema version, if known; otherwise `nothing`. Likewise the `version` is a `VersionNumber` or `nothing`.
+"""
+schema_provider(::SchemaVersion) = (; name=nothing, version=nothing)
+# shadow `pkgversion` so we don't fail on pre-1.9
+pkgversion(m::Module) = isdefined(Base, :pkgversion) ? Base.pkgversion(m) : nothing
+
+# Used in the implementation of `schema_provider`.
+function defining_package_version(m::Module)
+    rootmodule = Base.moduleroot(m)
+    # Check if this module was defined in a package.
+    path = pathof(rootmodule)
+    path === nothing && return (; name=nothing, version=nothing)
+    return (; name=Symbol(rootmodule), version=pkgversion(rootmodule))
+end
 
 """
     Legolas.declared_fields(sv::Legolas.SchemaVersion)
@@ -375,7 +417,7 @@ macro schema(schema_name, schema_prefix)
     schema_prefix isa Symbol || return :(throw(ArgumentError(string("`Prefix` provided to `@schema` is not a valid type name: ", $(Base.Meta.quot(schema_prefix))))))
     return quote
         # This approach provides some safety against accidentally replacing another module's schema's name,
-        # without making it annoying to reload code/modules in an interactice development context.
+        # without making it annoying to reload code/modules in an interactive development context.
         m = $Legolas._schema_declared_in_module(Val(Symbol($schema_name)))
         if m isa Module && string(m) != string(@__MODULE__)
             throw(ArgumentError(string("A schema with this name was already declared by a different module: ", m)))
@@ -476,6 +518,7 @@ function _generate_schema_version_definitions(schema_version::SchemaVersion, par
     return quote
         @inline $Legolas.declared(::$quoted_schema_version_type) = true
         @inline $Legolas.identifier(::$quoted_schema_version_type) = $identifier_string
+        $Legolas.schema_provider(::$quoted_schema_version_type) = $Legolas.defining_package_version(@__MODULE__)
         @inline $Legolas.parent(::$quoted_schema_version_type) = $(Base.Meta.quot(parent))
         $Legolas.declared_fields(::$quoted_schema_version_type) = $declared_field_names_types
         $Legolas.declaration(::$quoted_schema_version_type) = $(Base.Meta.quot(schema_version_declaration))

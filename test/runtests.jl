@@ -4,6 +4,46 @@ using Legolas: @schema, @version, CheckConstraintError, SchemaVersion,
                SchemaVersionDeclarationError, DeclaredFieldInfo
 using Accessors
 using Aqua
+using Pkg
+
+# This test set goes before we load `TestProviderPkg`
+@testset "#46: Informative errors when reading unknown schemas from packages" begin
+    err = Legolas.UnknownSchemaVersionError(Legolas.SchemaVersion("test-provider-pkg.foo", 1), :TestProviderPkg, v"0.1.0")
+    @test_throws err Legolas.read("test_provider_pkg.arrow")
+    @test contains(sprint(Base.showerror, err), "TestProviderPkg")
+
+    # Test we can load the table with Arrow.Table as the error message suggests
+    table = Arrow.Table("test_provider_pkg.arrow")
+    @test table.a[1] == 1
+    @test length(table.a) == 1
+
+    # Let's test some more error printing while we're here; if we did not have the VersionNumber
+    # (e.g. since the table was generated on Julia pre-1.9), we should still print a reasonable message:
+    err = Legolas.UnknownSchemaVersionError(Legolas.SchemaVersion("test-provider-pkg.foo", 1), :TestProviderPkg, missing)
+    @test contains(sprint(Base.showerror, err), "TestProviderPkg")
+
+    # Test a table that does not have the metadata
+    err = Legolas.UnknownSchemaVersionError(Legolas.SchemaVersion("test.issue-94-parent", 1), missing, missing)
+    @test_throws err Legolas.read("issue-94.arrow")
+    # Still a reasonable message
+    @test contains(sprint(Base.showerror, err), "UnknownSchemaVersionError: encountered unknown Legolas schema")
+end
+
+# Now load the package, and verify we can write the tables with this metadata
+Pkg.develop(; path=joinpath(@__DIR__, "TestProviderPkg"))
+using TestProviderPkg
+
+@testset "#46: Writing informative metadata about packages providing schemas" begin
+    table = [TestProviderPkg.FooV1(; a=1)]
+    Legolas.write("test_provider_pkg.arrow", table, TestProviderPkg.FooV1SchemaVersion())
+    table = Legolas.read("test_provider_pkg.arrow")
+    v = Legolas.extract_metadata(table, Legolas.LEGOLAS_SCHEMA_PROVIDER_NAME_METADATA_KEY)
+    @test v == "TestProviderPkg"
+
+    v = Legolas.extract_metadata(table, Legolas.LEGOLAS_SCHEMA_PROVIDER_VERSION_METADATA_KEY)
+    # We currently only write the version on 1.9+ where we can use `pkgversion`
+    @test v == (VERSION >= v"1.9-" ? "0.1.0" : nothing)
+end
 
 @test_throws SchemaVersionDeclarationError("no prior `@schema` declaration found in current module") @version(TestV1, begin x end)
 
@@ -352,7 +392,9 @@ end
         @test_throws SchemaVersionDeclarationError("malformed `@version` field expression: f()") @version(ChildV2, begin f() end)
     end
 
-    @test_throws UndefVarError(:UnknownV1) @version(ChildV1 > UnknownV1, begin x end)
+    # Workaround https://github.com/JuliaLang/julia/issues/54082
+    err = v"1.11-" <= VERSION <= v"1.12-" ? UndefVarError(:UnknownV1, Main) : UndefVarError(:UnknownV1)
+    @test_throws err @version(ChildV1 > UnknownV1, begin x end)
 
     undeclared = SchemaVersion("undeclared", 3)
 
