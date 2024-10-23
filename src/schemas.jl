@@ -120,12 +120,12 @@ function Base.showerror(io::IO, e::UnknownSchemaVersionError)
     if !ismissing(e.schema_provider_name)
         provider_string = string(e.schema_provider_name)
         if !ismissing(e.schema_provider_version)
-            provider_string *= string(" (version: ", e.schema_provider_version, ")")
+            provider_string *= string(" ", e.schema_provider_version)
         end
         print(io, """
                 The table's metadata indicates that the table was created with a schema defined in:
 
-                $(provider_string)
+                  $(provider_string)
 
                 You likely need to load a compatible version of this package to populate your session with the schema definition.
                 """)
