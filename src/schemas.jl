@@ -865,6 +865,8 @@ macro version(record_type, declared_fields_block=nothing)
     declared_field_names_types = Expr(:tuple, Expr(:parameters, (Expr(:kw, f.name, esc(f.type)) for f in declared_field_infos)...))
     constraints = [Base.Meta.quot(ex) for ex in declared_constraint_statements]
 
+    latestworld = isdefined(Core, :var"@latestworld") ? :(@Core.latestworld) : nothing
+
     return quote
         if !isdefined((@__MODULE__), :__legolas_schema_name_from_prefix__)
             throw(SchemaVersionDeclarationError("no prior `@schema` declaration found in current module"))
@@ -890,7 +892,9 @@ macro version(record_type, declared_fields_block=nothing)
             else
                 Base.@__doc__($(Base.Meta.quot(record_type)))
                 $(esc(:eval))($Legolas._generate_schema_version_definitions(schema_version, parent, $declared_field_names_types, schema_version_declaration))
+                $latestworld
                 $(esc(:eval))($Legolas._generate_validation_definitions(schema_version))
+                $latestworld
                 $(esc(:eval))($Legolas._generate_record_type_definitions(schema_version, $(Base.Meta.quot(record_type)), [$(constraints...)]))
             end
         end
