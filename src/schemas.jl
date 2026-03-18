@@ -55,6 +55,14 @@ end
 
 SchemaVersion(sv::SchemaVersion) = sv
 
+function SchemaVersion(x::Any)
+    if !(hasproperty(x, :name) && hasproperty(x, :version))
+        msg = "Cannot construct `SchemaVersion` from $x without `name` and `version` properties"
+        throw(ArgumentError(msg))
+    end
+    return SchemaVersion(x.name, x.version)
+end
+
 #####
 ##### `parse_identifier`
 #####

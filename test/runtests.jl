@@ -4,6 +4,7 @@ using Legolas: @schema, @version, CheckConstraintError, SchemaVersion,
                SchemaVersionDeclarationError, DeclaredFieldInfo
 using Accessors
 using Aqua
+using JSON3
 using Pkg
 
 # This test set goes before we load `TestProviderPkg`
@@ -625,6 +626,15 @@ end
         row = MissingOnlyV1()
         @test Legolas.complies_with(Tables.schema([row]), MissingOnlyV1SchemaVersion())
     end
+end
+
+@testset "SchemaVersion constructor" begin
+    sv = ParentV1SchemaVersion()
+    @test SchemaVersion(sv) == sv
+    nt = (; name=string(Legolas.name(sv)), version=Legolas.version(sv))
+    @test SchemaVersion(nt) == sv
+    @test SchemaVersion(nt...) == sv
+    @test SchemaVersion(JSON3.read(JSON3.write(nt))) == sv
 end
 
 @testset "miscellaneous Legolas/src/tables.jl tests" begin
