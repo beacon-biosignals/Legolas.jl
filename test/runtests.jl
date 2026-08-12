@@ -919,7 +919,7 @@ end
     catch e
         @test e isa TypeError
 
-        bt = Base.process_backtrace(catch_backtrace())
+        bt = Base.process_backtrace(stacktrace(catch_backtrace()))
         sf = bt[1][1]::Base.StackFrame
         @test string(sf.file) == @__FILE__
         @test sf.line == CONSTRAINT_V1_EQUAL_CONSTRAINT_LINE
